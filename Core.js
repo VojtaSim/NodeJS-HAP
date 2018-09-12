@@ -1,50 +1,39 @@
-var path = require('path');
-var storage = require('node-persist');
-var uuid = require('./').uuid;
-var Accessory = require('./').Accessory;
-var accessoryLoader = require('./lib/AccessoryLoader');
-
-console.log("HAP-NodeJS starting...");
-
-// Initialize our storage system
-storage.initSync();
+const Accessory = require('./src/Accessory');
 
 // Our Accessories will each have their own HAP server; we will assign ports sequentially
-var targetPort = 51826;
-
-// Load up all accessories in the /accessories folder
-var dir = path.join(__dirname, "accessories");
-var accessories = accessoryLoader.loadDirectory(dir);
+let targetPort = 51826;
+// Load all accessories in the /accessories folder
+const accessories = Accessory.load('accessories/*_accessory.js');
 
 // Publish them all separately (as opposed to BridgedCore which publishes them behind a single Bridge accessory)
-accessories.forEach(function(accessory) {
+accessories.forEach(accessory => {
 
-  // To push Accessories separately, we'll need a few extra properties
-  if (!accessory.username)
-    throw new Error("Username not found on accessory '" + accessory.displayName +
-                    "'. Core.js requires all accessories to define a unique 'username' property.");
+	// To push Accessories separately, we'll need a few extra properties
+	if (!accessory.info.username) {
+		throw new Error(
+			`Username not found on accessory '${accessory.displayName}'.` +
+			`All accessories are required to define a unique 'username' property.`
+		);
+	}
 
-  if (!accessory.pincode)
-    throw new Error("Pincode not found on accessory '" + accessory.displayName +
-                    "'. Core.js requires all accessories to define a 'pincode' property.");
+	if (!accessory.info.pincode) {
+		throw new Error(
+			`Pincode not found on accessory '${accessory.displayName}'.` +
+			`All accessories are required to define a unique 'pincode' property.`
+		);
+	}
 
-  // publish this Accessory on the local network
-  accessory.publish({
-    port: targetPort++,
-    username: accessory.username,
-    pincode: accessory.pincode
-  });
+	// publish this Accessory on the local network
+	accessory.publish({
+		port: targetPort++
+	});
 });
 
-var signals = { 'SIGINT': 2, 'SIGTERM': 15 };
-Object.keys(signals).forEach(function (signal) {
-  process.on(signal, function () {
-    for (var i = 0; i < accessories.length; i++) {
-      accessories[i].unpublish();
-    }
+const signals = { 'SIGINT': 2, 'SIGTERM': 15 };
+Object.keys(signals).forEach(signal => process.on(signal, () => {
+	accessories.forEach(accessory => accessory.unpublish());
+	setTimeout(() => process.exit(128 + signals[signal]), 1000);
+}));
 
-    setTimeout(function (){
-        process.exit(128 + signals[signal]);
-    }, 1000)
-  });
-});
+
+

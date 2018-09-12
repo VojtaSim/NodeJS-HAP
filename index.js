@@ -1,34 +1,21 @@
-var Accessory = require('./lib/Accessory.js').Accessory;
-var Bridge = require('./lib/Bridge.js').Bridge;
-var Camera = require('./lib/Camera.js').Camera;
-var Service = require('./lib/Service.js').Service;
-var Characteristic = require('./lib/Characteristic.js').Characteristic;
-var uuid = require('./lib/util/uuid');
-var AccessoryLoader = require('./lib/AccessoryLoader.js');
-var StreamController = require('./lib/StreamController.js').StreamController;
-var storage = require('node-persist');
-var HAPServer = require('./lib/HAPServer').HAPServer;
+const Accessory = require('./src/Accessory');
+const Bridge = require('./src/Bridge');
+const Camera = require('./src/Camera');
+const Service = require('./src/Service');
+const Characteristic = require('./src/Characteristic');
+const StreamController = require('./src/StreamController');
+const HAPServer = require('./src/HAPServer');
 
 // ensure Characteristic subclasses are defined
-var HomeKitTypes = require('./lib/gen/HomeKitTypes');
+const HomeKitTypes = require('./lib/gen/HomeKitTypes');
 
 module.exports = {
-  init: init,
-  Accessory: Accessory,
-  Bridge: Bridge,
-  Camera: Camera,
-  Service: Service,
-  Characteristic: Characteristic,
-  uuid: uuid,
-  AccessoryLoader: AccessoryLoader,
-  StreamController: StreamController,
-  HAPServer: HAPServer
-}
-
-function init(storagePath) {
-  // initialize our underlying storage system, passing on the directory if needed
-  if (typeof storagePath !== 'undefined')
-    storage.initSync({ dir: storagePath });
-  else
-    storage.initSync(); // use whatever is default
+  Accessory,
+  Bridge,
+  Camera,
+  Service,
+  Characteristic,
+  AccessoryLoader,
+  StreamController,
+  HAPServer
 }

@@ -5,7 +5,7 @@ var inherits = require('util').inherits;
 var EventEmitter = require('events').EventEmitter;
 var clone = require('./util/clone').clone;
 var uuid = require('./util/uuid');
-var tlv = require('./util/tlv');
+var tlv = require('../encyption/tlv');
 var Service = require('./Service').Service;
 var Characteristic = require('./Characteristic').Characteristic;
 var HomeKitTypes = require('./gen/HomeKitTypes');
@@ -229,7 +229,9 @@ StreamController.prototype._createService = function() {
   managementService
     .getCharacteristic(Characteristic.StreamingStatus)
     .on('get', function(callback) {
-      var data = tlv.encode( 0x01, self.streamStatus );
+      var data = tlv.encode({
+        [0x01]: self.streamStatus
+      });
       callback(null, data.toString('base64'));
     });
 
@@ -678,36 +680,36 @@ StreamController.prototype._generateSetupResponse = function(identifier, respons
       let audioKey = audioInfo["srtp_key"];
       let audioSalt = audioInfo["srtp_salt"];
 
-      videoSRTP = tlv.encode(
-        StreamController.SetupSRTP_PARAM.CRYPTO, StreamController.SRTPCryptoSuites.AES_CM_128_HMAC_SHA1_80,
-        StreamController.SetupSRTP_PARAM.MASTER_KEY, videoKey,
-        StreamController.SetupSRTP_PARAM.MASTER_SALT, videoSalt
-      );
+      videoSRTP = tlv.encode({
+        [StreamController.SetupSRTP_PARAM.CRYPTO]: StreamController.SRTPCryptoSuites.AES_CM_128_HMAC_SHA1_80,
+        [StreamController.SetupSRTP_PARAM.MASTER_KEY]: videoKey,
+        [StreamController.SetupSRTP_PARAM.MASTER_SALT]: videoSalt
+      });
 
-      audioSRTP = tlv.encode(
-        StreamController.SetupSRTP_PARAM.CRYPTO, StreamController.SRTPCryptoSuites.AES_CM_128_HMAC_SHA1_80,
-        StreamController.SetupSRTP_PARAM.MASTER_KEY, audioKey,
-        StreamController.SetupSRTP_PARAM.MASTER_SALT, audioSalt
-      );
+      audioSRTP = tlv.encode({
+        [StreamController.SetupSRTP_PARAM.CRYPTO]: StreamController.SRTPCryptoSuites.AES_CM_128_HMAC_SHA1_80,
+        [StreamController.SetupSRTP_PARAM.MASTER_KEY]: audioKey,
+        [StreamController.SetupSRTP_PARAM.MASTER_SALT]: audioSalt
+      });
     }
   }
 
-  var addressTLV = tlv.encode(
-    StreamController.SetupAddressInfo.ADDRESS_VER, ipVer,
-    StreamController.SetupAddressInfo.ADDRESS, ipAddress,
-    StreamController.SetupAddressInfo.VIDEO_RTP_PORT, videoPort,
-    StreamController.SetupAddressInfo.AUDIO_RTP_PORT, audioPort
-  );
+  var addressTLV = tlv.encode({
+    [StreamController.SetupAddressInfo.ADDRESS_VER]: ipVer,
+    [StreamController.SetupAddressInfo.ADDRESS]: ipAddress,
+    [StreamController.SetupAddressInfo.VIDEO_RTP_PORT]: videoPort,
+    [StreamController.SetupAddressInfo.AUDIO_RTP_PORT]: audioPort
+  });
 
-  var responseTLV = tlv.encode(
-    StreamController.SetupTypes.SESSION_ID, identifier,
-    StreamController.SetupTypes.STATUS, StreamController.SetupStatus.SUCCESS,
-    StreamController.SetupTypes.ADDRESS, addressTLV,
-    StreamController.SetupTypes.VIDEO_SRTP_PARAM, videoSRTP,
-    StreamController.SetupTypes.AUDIO_SRTP_PARAM, audioSRTP,
-    StreamController.SetupTypes.VIDEO_SSRC, videoSSRC,
-    StreamController.SetupTypes.AUDIO_SSRC, audioSSRC
-  );
+  var responseTLV = tlv.encode({
+    [StreamController.SetupTypes.SESSION_ID]: identifier,
+    [StreamController.SetupTypes.STATUS]: StreamController.SetupStatus.SUCCESS,
+    [StreamController.SetupTypes.ADDRESS]: addressTLV,
+    [StreamController.SetupTypes.VIDEO_SRTP_PARAM]: videoSRTP,
+    [StreamController.SetupTypes.AUDIO_SRTP_PARAM]: audioSRTP,
+    [StreamController.SetupTypes.VIDEO_SSRC]: videoSSRC,
+    [StreamController.SetupTypes.AUDIO_SSRC]: audioSSRC
+  });
 
   self.setupResponse = responseTLV.toString('base64');
   callback();
@@ -720,7 +722,7 @@ StreamController.prototype._updateStreamStatus = function(status) {
 
   self.service
     .getCharacteristic(Characteristic.StreamingStatus)
-    .setValue(tlv.encode( 0x01, self.streamStatus ).toString('base64'));
+    .setValue(tlv.encode({ [0x01]: self.streamStatus }).toString('base64'));
 }
 
 StreamController.prototype._handleSetupRead = function(callback) {
@@ -736,9 +738,9 @@ StreamController.prototype._supportedRTPConfiguration = function(supportSRTP) {
     debug("Client claims it doesn't support SRTP. The stream may stops working with future iOS releases.");
   }
 
-  return tlv.encode(
-            StreamController.RTPConfigTypes.CRYPTO, cryptoSuite
-         ).toString('base64');
+  return tlv.encode({
+            [StreamController.RTPConfigTypes.CRYPTO]: cryptoSuite
+  }).toString('base64');
 }
 
 StreamController.prototype._supportedVideoStreamConfiguration = function(videoParams) {
@@ -749,19 +751,23 @@ StreamController.prototype._supportedVideoStreamConfiguration = function(videoPa
     throw new Error('Video codec cannot be undefined');
   }
 
-  var videoCodecParamsTLV = tlv.encode(
-    StreamController.VideoCodecParamTypes.PACKETIZATION_MODE, StreamController.VideoCodecParamPacketizationModeTypes.NON_INTERLEAVED
-  );
+  var videoCodecParamsTLV = tlv.encode({
+    [StreamController.VideoCodecParamTypes.PACKETIZATION_MODE]: StreamController.VideoCodecParamPacketizationModeTypes.NON_INTERLEAVED
+  });
 
   let profiles = codec["profiles"];
   profiles.forEach(function(value) {
-    let tlvBuffer = tlv.encode(StreamController.VideoCodecParamTypes.PROFILE_ID, value);
+    let tlvBuffer = tlv.encode({
+      [StreamController.VideoCodecParamTypes.PROFILE_ID]: value 
+    });
     videoCodecParamsTLV = Buffer.concat([videoCodecParamsTLV, tlvBuffer]);
   });
 
   let levels = codec["levels"];
   levels.forEach(function(value) {
-    let tlvBuffer = tlv.encode(StreamController.VideoCodecParamTypes.LEVEL, value);
+    let tlvBuffer = tlv.encode({
+      [StreamController.VideoCodecParamTypes.LEVEL]: value
+    });
     videoCodecParamsTLV = Buffer.concat([videoCodecParamsTLV, tlvBuffer]);
   });
 
@@ -783,23 +789,25 @@ StreamController.prototype._supportedVideoStreamConfiguration = function(videoPa
     var frameRate = bufferShim.alloc(1);
     frameRate.writeUInt8(resolution[2]);
 
-    var videoAttrTLV = tlv.encode(
-      StreamController.VideoAttributesTypes.IMAGE_WIDTH, imageWidth,
-      StreamController.VideoAttributesTypes.IMAGE_HEIGHT, imageHeight,
-      StreamController.VideoAttributesTypes.FRAME_RATE, frameRate
-    );
-    var videoAttrBuffer = tlv.encode(StreamController.VideoTypes.ATTRIBUTES, videoAttrTLV);
+    var videoAttrTLV = tlv.encode({
+      [StreamController.VideoAttributesTypes.IMAGE_WIDTH]: imageWidth,
+      [StreamController.VideoAttributesTypes.IMAGE_HEIGHT]: imageHeight,
+      [StreamController.VideoAttributesTypes.FRAME_RATE]: frameRate
+    });
+    var videoAttrBuffer = tlv.encode({
+      [StreamController.VideoTypes.ATTRIBUTES]: videoAttrTLV
+    });
     videoAttrsTLV = Buffer.concat([videoAttrsTLV, videoAttrBuffer]);
   });
 
-  var configurationTLV = tlv.encode(
-    StreamController.VideoTypes.CODEC, StreamController.VideoCodecTypes.H264,
-    StreamController.VideoTypes.CODEC_PARAM, videoCodecParamsTLV
-  );
+  var configurationTLV = tlv.encode({
+    [StreamController.VideoTypes.CODEC]: StreamController.VideoCodecTypes.H264,
+    [StreamController.VideoTypes.CODEC_PARAM]: videoCodecParamsTLV
+  });
 
-  return tlv.encode(
-    0x01, Buffer.concat([configurationTLV, videoAttrsTLV])
-  ).toString('base64');
+  return tlv.encode({
+    [0x01]: Buffer.concat([configurationTLV, videoAttrsTLV])
+  }).toString('base64');
 }
 
 StreamController.prototype._supportedAudioStreamConfiguration = function(audioParams) {
@@ -852,16 +860,16 @@ StreamController.prototype._supportedAudioStreamConfiguration = function(audioPa
       return;
     }
 
-    var audioParamTLV = tlv.encode(
-      StreamController.AudioCodecParamTypes.CHANNEL, 1,
-      StreamController.AudioCodecParamTypes.BIT_RATE, bitrate,
-      StreamController.AudioCodecParamTypes.SAMPLE_RATE, samplerate
-    );
+    var audioParamTLV = tlv.encode({
+      [StreamController.AudioCodecParamTypes.CHANNEL]: 1,
+      [StreamController.AudioCodecParamTypes.BIT_RATE]: bitrate,
+      [StreamController.AudioCodecParamTypes.SAMPLE_RATE]: samplerate
+    });
 
-    var audioConfiguration = tlv.encode(
-      StreamController.AudioTypes.CODEC, codec,
-      StreamController.AudioTypes.CODEC_PARAM, audioParamTLV
-    );
+    var audioConfiguration = tlv.encode({
+      [StreamController.AudioTypes.CODEC]: codec,
+      [StreamController.AudioTypes.CODEC_PARAM]: audioParamTLV
+    });
 
     audioConfigurationsBuffer = Buffer.concat([audioConfigurationsBuffer, tlv.encode(0x01, audioConfiguration)]);
   });
@@ -874,22 +882,29 @@ StreamController.prototype._supportedAudioStreamConfiguration = function(audioPa
     var bitrate = StreamController.AudioCodecParamBitRateTypes.VARIABLE;
     var samplerate = StreamController.AudioCodecParamSampleRateTypes.KHZ_24;
 
-    var audioParamTLV = tlv.encode(
-    StreamController.AudioCodecParamTypes.CHANNEL, 1,
-    StreamController.AudioCodecParamTypes.BIT_RATE, bitrate,
-    StreamController.AudioCodecParamTypes.SAMPLE_RATE, StreamController.AudioCodecParamSampleRateTypes.KHZ_24
-    );
+    var audioParamTLV = tlv.encode({
+    [StreamController.AudioCodecParamTypes.CHANNEL]: 1,
+    [StreamController.AudioCodecParamTypes.BIT_RATE]: bitrate,
+    [StreamController.AudioCodecParamTypes.SAMPLE_RATE]: StreamController.AudioCodecParamSampleRateTypes.KHZ_24
+    });
 
 
-    var audioConfiguration = tlv.encode(
-      StreamController.AudioTypes.CODEC, codec,
-      StreamController.AudioTypes.CODEC_PARAM, audioParamTLV
-    );
+    var audioConfiguration = tlv.encode({
+      [StreamController.AudioTypes.CODEC]: codec,
+      [StreamController.AudioTypes.CODEC_PARAM]: audioParamTLV
+    });
 
-    audioConfigurationsBuffer = tlv.encode(0x01, audioConfiguration);
+    audioConfigurationsBuffer = tlv.encode({
+      [0x01]: audioConfiguration
+    });
 
     self.videoOnly = true;
   }
 
-  return Buffer.concat([audioConfigurationsBuffer, tlv.encode(0x02, comfortNoiseValue)]).toString('base64');
+  return Buffer.concat([
+    audioConfigurationsBuffer,
+    tlv.encode({
+      [0x02]: comfortNoiseValue 
+    })
+  ]).toString('base64');
 }

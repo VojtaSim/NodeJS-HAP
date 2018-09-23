@@ -6,26 +6,28 @@ function HKDF(hashAlg, salt, ikm, info, size) {
 	const hashLength = hash.digest().length;
 
 	// now we compute the PRK
-	const hmac = crypto.createHmac(hashAlg, salt);
+	let hmac = crypto.createHmac(hashAlg, salt);
 	hmac.update(ikm);
+	const prk = hmac.digest();
 
 	let prev = Buffer.alloc(0);
 	const buffers = [];
-	const numBlocks = Math.ceil(size / hashLength);
+	const num_blocks = Math.ceil(size / hashLength);
+	info = Buffer.from(info);
 
-	for (let i = 0; i < numBlocks; i++) {
-		const hmac = crypto.createHmac(hashAlg, hmac.digest());
-		const input = Buffer.concat([
+	for (var i = 0; i < num_blocks; i++) {
+		hmac = crypto.createHmac(hashAlg, prk);
+
+		var input = Buffer.concat([
 			prev,
-			Buffer.from(info),
+			info,
 			Buffer.from(String.fromCharCode(i + 1))
 		]);
 		hmac.update(input);
 		prev = hmac.digest();
 		buffers.push(prev);
 	}
-
 	return Buffer.concat(buffers, size).slice(0, size);
 }
 
-module.exports = { HKDF };
+module.exports = HKDF;

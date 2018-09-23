@@ -43,6 +43,8 @@ class Service extends EventEmitter {
 			throw new Error('Services must be created with a valid UUID.');
 		}
 
+		super();
+
 		this.displayName = displayName;
 		this.uuid = serviceUUID;
 		this.subType = subType;
@@ -87,14 +89,14 @@ class Service extends EventEmitter {
 		// check for UUID conflict
 		for (const index in this.characteristics) {
 			const existing = this.characteristics[index];
-			if (existing.UUID === characteristic.UUID) {
+			if (existing.uuid === characteristic.UUID) {
 				if (characteristic.UUID === '00000052-0000-1000-8000-0026BB765291') {
 					//This is a special workaround for the Firmware Revision characteristic.
 					return existing;
 				}
 				throw new Error(
 					'Cannot add a Characteristic with the same UUID as ' +
-					`another Characteristic in this Service: ${existing.UUID}`
+					`another Characteristic in this Service: ${existing.uuid}`
 				);
 			}
 		}
@@ -284,10 +286,10 @@ class Service extends EventEmitter {
 			characteristics: characteristicsHAP,
 		};
 
-		if (this.isPrimaryService) {
+		if (this.isPrimaryService !== undefined) {
 			hap.primary = !!this.isPrimaryService;
 		}
-		if (this.isHiddenService) {
+		if (this.isHiddenService !== undefined) {
 			hap.hidden = !!this.isHiddenService;
 		}
 		if (this.linkedServices.length > 0) {
@@ -314,7 +316,8 @@ class Service extends EventEmitter {
 			this.iid = 1;
 		} else {
 			// assign our own ID based on our UUID
-			this.iid = baseIID + identifierCache.getIID(accessoryUUID, this.uuid, this.subType);
+			const iid = identifierCache.getIID(accessoryUUID, this.uuid, this.subType);
+			this.iid = baseIID + iid;
 		}
 
 		// assign IIDs to our Characteristics

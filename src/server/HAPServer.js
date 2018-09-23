@@ -2,17 +2,15 @@ const HAPConnection = require('./HAPConnection');
 const HAPRequestData = require('./HAPRequestData');
 
 const EventEmitter = require('events');
-const Url = require('url');
+const URL = require('url').URL;
 const net = require('net');
 const debug = require('debug')('HAPServer');
 const crypto = require('crypto');
 const srp = require('fast-srp-hap');
 const ed25519 = require('ed25519-hap');
-const hkdf = require('../encyption/hkdf');
-const tlv = require('../encyption/tlv');
-var encryption = require('../encyption/encryption');
-
-module.exports = HAPServer;
+const HKDF = require('../encryption/hkdf');
+const tlv = require('../encryption/tlv');
+const encryption = require('../encryption/encryption');
 
 /**
  * The actual HAP server that iOS devices talk to.
@@ -43,6 +41,7 @@ class HAPServer extends EventEmitter {
 	 * @param {Accessory} accessory
 	 */
 	constructor(accessory, allowInsecureRequest = false) {
+		super();
 		this.accessory = accessory;
 		this.allowInsecureRequest = allowInsecureRequest;
 	}
@@ -72,12 +71,13 @@ class HAPServer extends EventEmitter {
 			() => this._onKeepAliveTimerTick(),
 			1000 * 60 * 10	// 10 minutes
 		);
-		
+
 		this._tcpServer.on('connection', socket => this._onConnection(socket));
 		this._tcpServer.on('listening', () => {
-			const { port } = this._tcpServer.address();
-			this.emit('server-listening', port);
+			const {  port } = this._tcpServer.address();
 			debug(`Server listening on port %s`, port);
+
+			this.emit('server-listening', port);
 		});
 
 		this._tcpServer.listen(targetPort);
@@ -90,11 +90,13 @@ class HAPServer extends EventEmitter {
 	 * @fires 'server-stop' => Emitted when the server stops and all connections are closed.
 	 */
 	stop() {
+		debug(`[${this.accessory.info.displayName}] Stopping HAPServer.`);
+
 		this._tcpServer.close();
 		this._connections = [];
 		clearInterval(this._keepAliveTimerID);
 
-		this._tcpServer.on('listening', () => this.emit('server-stop'));
+		this._tcpServer.on('close', () => this.emit('server-stop'));
 	}
 
 	/**
@@ -147,26 +149,29 @@ class HAPServer extends EventEmitter {
 	 * @param {Object<string, boolean>} events
 	 */
 	_onRequest(request, response, session, events) {
-		const { username } = this.accessory.info;
-		const { method, url } = request;
+		const { displayName } = this.accessory.info;
 
-		debug("[%s] HAP Request: %s %s", username, method, url);
+		debug(`[${displayName}] HAP Request: ${request.method} ${request.url}`);
 
-		const requestData = new HAPRequestData(request);
+		let dataBuffer = Buffer.alloc(0);
+		request.on('data', data => dataBuffer = Buffer.concat([dataBuffer, data]));
 		request.on('end', async () => {
+			const requestData = new HAPRequestData(dataBuffer);
 
 			// parse request.url (which can contain querystring, etc.)
 			// into components, then extract just the path
-			const { pathname } = url.parse(url);
+			const { pathname } = new URL(request.url, 'http://' + request.headers.host);
 
 			// all request data received; now process this request
 			const handlerPath = Object.keys(HAPServer.handlers)
 				.find(path => new RegExp('^' + path + '/?$').test(pathname));
 
 			if (!handlerPath) { // nobody handled this? reply 404
-				debug("[%s] WARNING: Handler for %s not implemented", username, url);
+				debug(`[${displayName}] WARNING: Handler for ${request.url} not implemented`);
 				response.writeHead(404, "Not found", { 'Content-Type': 'text/html' }); b
 				response.end();
+
+				return;
 			}
 
 			// match exact string and allow trailing slash
@@ -184,9 +189,9 @@ class HAPServer extends EventEmitter {
 	 * @param {Object<string, boolean>} events
 	 * @param {HAPRequestData} requestData
 	 */
-	_handleIdentify(request, response, session, events, requestData) {
+	async _handleIdentify(request, response, session, events, requestData) {
 		const isPaired = this.accessory.cache.isPaired();
-		
+
 		// identify only works if the accessory is not paired
 		if (!this.allowInsecureRequest && isPaired) {
 			response.writeHead(400, { "Content-Type": "application/hap+json" });
@@ -217,7 +222,7 @@ class HAPServer extends EventEmitter {
 	 * @param {Object<string, boolean>} events
 	 * @param {HAPRequestData} requestData
 	 */
-	_handlePair(request, response, session, events, requestData) {
+	async _handlePair(request, response, session, events, requestData) {
 		// Can only be directly paired with one iOS device
 		if (!this.allowInsecureRequest && this.accessory.cache.isPaired()) {
 			response.writeHead(403);
@@ -225,12 +230,14 @@ class HAPServer extends EventEmitter {
 
 			return;
 		}
-		if (requestData.sequence == 0x01) {
+		requestData = requestData.decode();
+
+		if (requestData.sequenceNumber == 0x01) {
 			this._handlePairStepOne(response, session);
-		} else if (requestData.sequence == 0x03) {
+		} else if (requestData.sequenceNumber == 0x03) {
 			this._handlePairStepTwo(response, session, requestData);
-		} else if (requestData.sequence == 0x05) {
-			this._handlePairStepThree(response, session, requestData);
+		} else if (requestData.sequenceNumber == 0x05) {
+			await this._handlePairStepThree(response, session, requestData);
 		}
 	}
 
@@ -241,7 +248,8 @@ class HAPServer extends EventEmitter {
 	 * @param {{ sessionID: string }} session
 	 */
 	_handlePairStepOne(response, session) {
-		debug("[%s] Pair step 1/5", this.accessory.info.displayName);
+		const { displayName, pincode } = this.accessory.info;
+		debug(`[${displayName}] Pair step 1/5`);
 
 		const salt = crypto.randomBytes(16);
 		const srpParams = srp.params["3072"];
@@ -252,7 +260,7 @@ class HAPServer extends EventEmitter {
 				srpParams,
 				Buffer.from(salt),
 				Buffer.from("Pair-Setup"),
-				Buffer.from(this.accessory.info.pincode),
+				Buffer.from(pincode),
 				key
 			);
 			const srpB = srpServer.computeB();
@@ -277,17 +285,20 @@ class HAPServer extends EventEmitter {
 	 * @param {HAPRequestData} requestData
 	 */
 	_handlePairStepTwo(response, session, requestData) {
-		debug("[%s] Pair step 2/5", this.accessory.info.displayName);
+		const { displayName } = this.accessory.info;
+		const { publicKey, passwordProof } = requestData;
+
+		debug(`[${displayName}] Pair step 2/5`);
 
 		// pull the SRP server we created in stepOne out of the current session
 		const srpServer = session.srpServer;
-		srpServer.setA(requestData.publicKey);
+		srpServer.setA(publicKey);
 
 		try {
-			srpServer.checkM1(requestData.passwordProof);
+			srpServer.checkM1(passwordProof);
 		} catch (error) {
 			// most likely the client supplied an incorrect pincode.
-			debug("[%s] Error while checking pincode: %s", this.accessory.info.displayName, error.message);
+			debug(`[${displayName}] Error while checking pincode: ${error.message}`);
 
 			response.writeHead(200, { "Content-Type": "application/pairing+tlv8" });
 			response.end(tlv.encode({
@@ -315,11 +326,11 @@ class HAPServer extends EventEmitter {
 	 * @param {{ sessionID: string }} session
 	 * @param {HAPRequestData} requestData
 	 */
-	_handlePairStepThree(response, session, requestData) {
-		debug("[%s] Pair step 3/5", this.accessory.info.displayName);
+	async _handlePairStepThree(response, session, requestData) {
+		debug(`[${this.accessory.info.displayName}] Pair step 3/5`);
 
 		// pull the SRP server we created in stepOne out of the current session
-		const srpServer = session.srpServer;
+		const { srpServer } = session;
 		const { encryptedData } = requestData;
 
 		const messageData = Buffer.alloc(encryptedData.length - 16);
@@ -332,7 +343,7 @@ class HAPServer extends EventEmitter {
 		const encSalt = Buffer.from("Pair-Setup-Encrypt-Salt");
 		const encInfo = Buffer.from("Pair-Setup-Encrypt-Info");
 
-		const outputKey = hkdf.HKDF("sha512", encSalt, S_private, encInfo, 32);
+		const outputKey = HKDF("sha512", encSalt, S_private, encInfo, 32);
 
 		const plaintextBuffer = Buffer.alloc(messageData.length);
 		encryption.verifyAndDecrypt(
@@ -350,10 +361,9 @@ class HAPServer extends EventEmitter {
 		const clientUsername = M5Packet[HAPRequestData.Types.USERNAME];
 		const clientLTPK = M5Packet[HAPRequestData.Types.PUBLIC_KEY];
 		const clientProof = M5Packet[HAPRequestData.Types.PROOF];
-		const hkdfEncKey = outputKey;
 
-		this._handlePairStepFour(
-			response, session, clientUsername, clientLTPK, clientProof, hkdfEncKey
+		await this._handlePairStepFour(
+			response, session, clientUsername, clientLTPK, clientProof, outputKey
 		);
 	}
 
@@ -367,7 +377,7 @@ class HAPServer extends EventEmitter {
 	 * @param {Buffer} clientProof
 	 * @param {Buffer} hkdfEncKey
 	 */
-	_handlePairStepFour(
+	async _handlePairStepFour(
 		response,
 		session,
 		clientUsername,
@@ -375,17 +385,18 @@ class HAPServer extends EventEmitter {
 		clientProof,
 		hkdfEncKey
 	) {
-		debug("[%s] Pair step 4/5", this.accessory.info.displayName);
+		const { displayName } = this.accessory.info;
+		debug(`[${displayName}] Pair step 4/5`);
 
 		const S_private = session.srpServer.computeK();
 		const controllerSalt = Buffer.from("Pair-Setup-Controller-Sign-Salt");
 		const controllerInfo = Buffer.from("Pair-Setup-Controller-Sign-Info");
-		const outputKey = hkdf.HKDF("sha512", controllerSalt, S_private, controllerInfo, 32);
+		const outputKey = HKDF("sha512", controllerSalt, S_private, controllerInfo, 32);
 
 		const completeData = Buffer.concat([outputKey, clientUsername, clientLTPK]);
 
 		if (!ed25519.Verify(completeData, clientProof, clientLTPK)) {
-			debug("[%s] Invalid signature", this.accessory.info.displayName);
+			debug(`[${displayName}] Invalid signature`);
 
 			response.writeHead(200, { "Content-Type": "application/pairing+tlv8" });
 			response.end(tlv.encode({
@@ -396,7 +407,7 @@ class HAPServer extends EventEmitter {
 			return;
 		}
 
-		this._handlePairStepFive(
+		await this._handlePairStepFive(
 			response, session, clientUsername, clientLTPK, hkdfEncKey
 		);
 	}
@@ -410,25 +421,25 @@ class HAPServer extends EventEmitter {
 	 * @param {Buffer} clientLTPK
 	 * @param {Buffer} hkdfEncKey
 	 */
-	_handlePairStepFive(response, session, clientUsername, clientLTPK, hkdfEncKey) {
-		const { username, displayName } = this.accessory.info;
-		const { privateKey } = this.accessory.cache;
-		debug("[%s] Pair step 5/5", displayName);
+	async _handlePairStepFive(response, session, clientUsername, clientLTPK, hkdfEncKey) {
+		const { displayName, username } = this.accessory.info;
+		const { privateKey, publicKey } = this.accessory.cache;
+
+		debug(`[${displayName}] Pair step 5/5`);
 
 		const S_private = session.srpServer.computeK();
-		const accessorySignSalt = Buffer.from("Pair-Setup-Accessory-Sign-Salt");
-		const accessorySignInfo = Buffer.from("Pair-Setup-Accessory-Sign-Info");
-		const outputKey = hkdf.HKDF(
-			"sha512", accessorySignSalt, S_private, accessorySignInfo, 32
-		);
+		const accessorySalt = Buffer.from("Pair-Setup-Accessory-Sign-Salt");
+		const accessoryInfo = Buffer.from("Pair-Setup-Accessory-Sign-Info");
+		const outputKey = HKDF("sha512", accessorySalt, S_private, accessoryInfo, 32);
 
 		const usernameData = Buffer.from(username);
-		const material = Buffer.concat([outputKey, usernameData, privateKey]);
+
+		const material = Buffer.concat([outputKey, usernameData, publicKey]);
 		const serverProof = ed25519.Sign(material, privateKey);
 
 		const message = tlv.encode({
 			[HAPRequestData.Types.USERNAME]: usernameData,
-			[HAPRequestData.Types.PUBLIC_KEY]: serverLTPK,
+			[HAPRequestData.Types.PUBLIC_KEY]: publicKey,
 			[HAPRequestData.Types.PROOF]: serverProof
 		});
 
@@ -436,21 +447,17 @@ class HAPServer extends EventEmitter {
 		const macBuffer = Buffer.alloc(16);
 		encryption.encryptAndSeal(hkdfEncKey, Buffer.from("PS-Msg06"), message, null, ciphertextBuffer, macBuffer);
 
-		// finally, notify listeners that we have been paired with a client
 		try {
 			await this.accessory.handlePair(clientUsername.toString(), clientLTPK);
 
-			// send final pairing response to client
 			response.writeHead(200, { "Content-Type": "application/pairing+tlv8" });
 			response.end(tlv.encode({
-				[HAPRequestData.Types.SEQUENCE_NUM]: 0x06,
-				[HAPRequestData.Types.ENCRYPTED_DATA]: Buffer.concat([
-					ciphertextBuffer,
-					macBuffer
-				])
+				[HAPServer.Types.SEQUENCE_NUM]: 0x06,
+				[HAPServer.Types.ENCRYPTED_DATA]: Buffer.concat([ciphertextBuffer, macBuffer])
 			}));
+
 		} catch (error) {
-			debug("[%s] Error adding pairing info: %s", displayName, error.message);
+			debug(`[${username}] Error adding pairing info: ${error.message}`);
 			response.writeHead(500, "Server Error");
 			response.end();
 		}
@@ -473,6 +480,8 @@ class HAPServer extends EventEmitter {
 
 			return;
 		}
+		requestData = requestData.decode();
+
 		if (requestData.sequenceNumber == 0x01) {
 			this._handlePairVerifyStepOne(response, session, requestData);
 		} else if (requestData.sequenceNumber == 0x03) {
@@ -505,7 +514,7 @@ class HAPServer extends EventEmitter {
 		const encSalt = Buffer.from("Pair-Verify-Encrypt-Salt");
 		const encInfo = Buffer.from("Pair-Verify-Encrypt-Info");
 
-		const outputKey = hkdf.HKDF("sha512", encSalt, sharedSec, encInfo, 32)
+		const outputKey = HKDF("sha512", encSalt, sharedSec, encInfo, 32)
 			.slice(0, 32);
 
 		// store keys in a new instance of HAPEncryption
@@ -548,7 +557,7 @@ class HAPServer extends EventEmitter {
 	 * @param {HAPRequestData} requestData
 	 */
 	_handlePairVerifyStepTwo(response, session, events, requestData) {
-		const { displayName } = this.accessory.info;
+		const { displayName }  = this.accessory.info;
 		const { encryptedData } = requestData;
 
 		debug("[%s] Pair verify step 2/2", displayName);
@@ -611,7 +620,7 @@ class HAPServer extends EventEmitter {
 			return;
 		}
 
-		debug("[%s] Client %s verification complete", username, clientUsername);
+		debug(`[${displayName}] Client ${clientUsername} verification complete`);
 
 		response.writeHead(200, { "Content-Type": "application/pairing+tlv8" });
 		response.end(tlv.encode({
@@ -626,8 +635,8 @@ class HAPServer extends EventEmitter {
 		const infoRead = Buffer.from("Control-Read-Encryption-Key");
 		const infoWrite = Buffer.from("Control-Write-Encryption-Key");
 
-		enc.accessoryToControllerKey = hkdf.HKDF("sha512", encSalt, enc.sharedSec, infoRead, 32);
-		enc.controllerToAccessoryKey = hkdf.HKDF("sha512", encSalt, enc.sharedSec, infoWrite, 32);
+		enc.accessoryToControllerKey = HKDF("sha512", encSalt, enc.sharedSec, infoRead, 32);
+		enc.controllerToAccessoryKey = HKDF("sha512", encSalt, enc.sharedSec, infoWrite, 32);
 
 		// Our connection is now completely setup. We now want to subscribe this connection to special
 		// "keepalive" events for detecting when connections are closed by the client.
@@ -643,7 +652,7 @@ class HAPServer extends EventEmitter {
 	 * @param {Object<string, boolean>} events
 	 * @param {HAPRequestData} requestData
 	 */
-	_handlePairings(request, response, session, events, requestData) {
+	async _handlePairings(request, response, session, events, requestData) {
 
 		// Only accept /pairing request if there is a secure session
 		if (this._isInsecureRequest(request, session)) {
@@ -653,7 +662,7 @@ class HAPServer extends EventEmitter {
 			return;
 		}
 		const { displayName } = this.accessory.info;
-		const { requestType, username: clientUsername, publicKey } = requestData;
+		const { requestType, username: clientUsername, publicKey } = requestData.decode();
 
 		if (requestType == 3) {
 			// technically we're already paired and communicating securely if the client is able to call /pairings at all!
@@ -702,7 +711,7 @@ class HAPServer extends EventEmitter {
 	 * @param {Object<string, boolean>} events
 	 * @param {HAPRequestData} requestData
 	 */
-	_handleAccessories(request, response, session, events, requestData) {
+	async _handleAccessories(request, response, session, events, requestData) {
 		if (this._isInsecureRequest(request, session)) {
 			response.writeHead(401, { "Content-Type": "application/hap+json" });
 			response.end(JSON.stringify({ status: HAPServer.Status.INSUFFICIENT_PRIVILEGES }));
@@ -731,7 +740,7 @@ class HAPServer extends EventEmitter {
 	 * @param {Object<string, boolean>} events
 	 * @param {HAPRequestData} requestData
 	 */
-	_handleCharacteristics(request, response, session, events, requestData) {
+	async _handleCharacteristics(request, response, session, events, requestData) {
 		if (this._isInsecureRequest(request, session)) {
 			response.writeHead(401, { "Content-Type": "application/hap+json" });
 			response.end(JSON.stringify({ status: HAPServer.Status.INSUFFICIENT_PRIVILEGES }));
@@ -739,12 +748,12 @@ class HAPServer extends EventEmitter {
 			return;
 		}
 
-		let characteristics, dataSets;
+		let characteristics, dataSets = [];
 
 		try {
 			if (request.method === "GET") {
 				// Extract the query params from the URL which looks like: /characteristics?id=1.9,2.14,...
-				const { searchParams } = new Url(request.url);
+				const { searchParams } = new URL(request.url, 'http://' + request.headers.host);
 
 				if (!searchParams.has('id')) {
 					response.writeHead(500);
@@ -802,7 +811,7 @@ class HAPServer extends EventEmitter {
 	 * @param {Object<string, boolean>} events
 	 * @param {HAPRequestData} requestData
 	 */
-	_handleResource(request, response, session, events, requestData) {
+	async _handleResource(request, response, session, events, requestData) {
 		if (
 			this._isInsecureRequest(request, session) ||
 			!this._isAuthorized(request, session)
@@ -959,3 +968,5 @@ function HAPEncryption() {
 	this.controllerToAccessoryKey = Buffer.alloc(0);
 	this.extraInfo = {};
 }
+
+module.exports = HAPServer;

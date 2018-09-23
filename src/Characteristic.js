@@ -28,20 +28,22 @@ class Characteristic extends EventEmitter {
 	 * @param {Object} [props]
 	 */
 	constructor(displayName, characteristicUUID, props) {
+		super();
 		this.displayName = displayName;
 		this.uuid = characteristicUUID;
 		this.iid = null; // assigned by our containing Service
-		this.value = this.getDefaultValue();
+		
 		this.status = null;
 		this.eventOnlyCharacteristic = false;
-		this.props = Object.assign({}, CharacteristicProps.DefaultProps);
+		this.props = {}; //Object.assign({}, CharacteristicProps.DefaultProps);
 
-		CharacteristicProps.ValidPropKeys
+		Characteristic.ValidPropKeys
 			.filter(prop => props.hasOwnProperty(prop))
 			.forEach(prop => this.props[prop] = props[prop]);
 
-		this._finishCharacteristicProps(this.props);
+		//this._finishCharacteristicProps(this.props);
 
+		this.value = this.getDefaultValue();
 		this.subscriptions = 0;
 
 		this._onGetCallback = null;
@@ -391,13 +393,13 @@ class Characteristic extends EventEmitter {
 		if (this.props.unit !== null) {
 			hap.unit = this.props.unit;
 		}
-		if (this.props.maxValue !== undefined) {
+		if (this.props.maxValue !== null) {
 			hap.maxValue = this.props.maxValue;
 		}
-		if (this.props.minValue !== undefined) {
+		if (this.props.minValue !== null) {
 			hap.minValue = this.props.minValue;
 		}
-		if (this.props.minStep !== undefined) {
+		if (this.props.minStep !== null) {
 			hap.minStep = this.props.minStep;
 		}
 
@@ -415,7 +417,7 @@ class Characteristic extends EventEmitter {
 		}
 
 		// if we're not readable, omit the "value" property - otherwise iOS will complain about non-compliance
-		if (!~this.props.perms.indexOf(Characteristic.Perms.READ)) {
+		if (!this.props.perms.includes(Characteristic.Perms.PAIRED_READ)) {
 			delete hap.value;
 		}
 
@@ -519,11 +521,8 @@ Characteristic.Units = {
 
 // Known HomeKit permission types
 Characteristic.Perms = {
-	READ: 'pr', //Kept for backwards compatability
 	PAIRED_READ: 'pr', //Added to match HAP's terminology
-	WRITE: 'pw', //Kept for backwards compatability
 	PAIRED_WRITE: 'pw', //Added to match HAP's terminology
-	NOTIFY: 'ev', //Kept for backwards compatability
 	EVENTS: 'ev', //Added to match HAP's terminology
 	ADDITIONAL_AUTHORIZATION: 'aa',
 	TIMED_WRITE: 'tw', //Not currently supported by IP

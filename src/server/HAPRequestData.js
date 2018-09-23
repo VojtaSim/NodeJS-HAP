@@ -1,34 +1,26 @@
 const tlv = require('../encryption/tlv');
 
 /**
- * Wrapper for manipulating with request data. After the request finished
- * transmitting the received data are decoded using TLV.
+ * Wrapper for manipulating with request data.
  */
 class HAPRequestData {
 
 	/**
-	 * @param {http.IncomingMessage} request
+	 * Creates an instance of HAPRequestData.
+	 *
+	 * @param {Buffer} data
+	 * @memberof HAPRequestData
 	 */
-	constructor(request) {
-		this._buffer = Buffer.alloc(0);
-		this._data = null;
-
-		request.on('data', data => {
-			this._buffer = Buffer.concat([this._buffer, data]);
-		});
-
-		request.on('end', () => {
-			this._data = tlv.decode(this._buffer);
-		});
+	constructor(data) {
+		this._data = data || Buffer.alloc(0);
+		this._decoded = null;
 	}
 
 	get sequenceNumber() {
-		this._checkDataPresence();
 		return this._data[HAPRequestData.Types.SEQUENCE_NUM][0];
 	}
 
 	get requestType() {
-		this._checkDataPresence();
 		return this._data[HAPRequestData.Types.REQUEST_TYPE][0];
 	}
 
@@ -36,7 +28,6 @@ class HAPRequestData {
 	 * Public key that exists only for a single login session.
 	 */
 	get publicKey() {
-		this._checkDataPresence();
 		return this._data[HAPRequestData.Types.PUBLIC_KEY];
 	}
 
@@ -44,12 +35,10 @@ class HAPRequestData {
 	 * The proof that you actually know your own password.
 	 */
 	get passwordProof() {
-		this._checkDataPresence();
 		return this._data[HAPRequestData.Types.PASSWORD_PROOF];
 	}
 
 	get username() {
-		this._checkDataPresence();
 		return this._data[HAPRequestData.Types.USERNAME];
 	}
 
@@ -57,19 +46,15 @@ class HAPRequestData {
 	 * The proof that you actually know your own password.
 	 */
 	get encryptedData() {
-		this._checkDataPresence();
 		return this._data[HAPRequestData.Types.ENCRYPTED_DATA];
 	}
 
-	/**
-	 * Checks if the request data finished transmitting.
-	 *
-	 * @throws {Error}
-	 */
-	_checkDataPresence() {
-		if (!this._data) {
-			throw new Error('Accessing request data before the request finished transmitting.');
-		}
+	decode() {
+		return new HAPRequestData(tlv.decode(this._data));
+	}
+
+	toString() {
+		return this._data.toString();
 	}
 }
 

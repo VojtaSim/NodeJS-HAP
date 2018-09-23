@@ -80,7 +80,7 @@ class Camera {
 		});
 	}
 
-	prepareStream(request, callback) {
+	prepareStream(request) {
 		// Invoked when iOS device requires stream
 
 		var sessionInfo = {};
@@ -156,7 +156,7 @@ class Camera {
 		response["address"] = addressResp;
 		this.pendingSessions[uuid.unparse(sessionID)] = sessionInfo;
 
-		callback(response);
+		return response;
 	}
 
 	handleStreamRequest(request) {

@@ -2,6 +2,19 @@ const crypto = require('crypto');
 const ed25519 = require('ed25519-hap');
 const AbstractCache = require('./AbstractCache');
 
+function generateSetupID() {
+	const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+	const bytes = crypto.randomBytes(4);
+	let setupID = '';
+
+	for (var i = 0; i < 4; i++) {
+		const index = bytes.readUInt8(i) % 26;
+		setupID += chars.charAt(index);
+	}
+
+	return setupID;
+}
+
 /**
  * AccessoryInfo is a model class containing a subset of Accessory data relevant to the internal HAP server,
  * such as encryption keys and username. It is persisted to disk.
@@ -14,6 +27,7 @@ class AccessoryCache extends AbstractCache {
 
 		accessoryCache.privateKey = privateKey;
 		accessoryCache.publicKey = publicKey;
+		accessoryCache.setupID = generateSetupID();
 
 		return accessoryCache;
 	}
@@ -23,7 +37,7 @@ class AccessoryCache extends AbstractCache {
 			const saved = AccessoryCache.readCacheFile(AccessoryCache.getCacheFilename(uuid));
 			const cache = new AccessoryCache(uuid);
 
-			let { 
+			let {
 				privateKey = '', publicKey = '', pairedClients = {}, setupID,
 				configVersion = 1, configHash,
 			} = saved;
@@ -38,8 +52,8 @@ class AccessoryCache extends AbstractCache {
 				);
 			}
 
-			Object.assign(cache, { 
-				privateKey, publicKey, pairedClients, setupID, 
+			Object.assign(cache, {
+				privateKey, publicKey, pairedClients, setupID,
 				configVersion, configHash
 			});
 
@@ -71,7 +85,7 @@ class AccessoryCache extends AbstractCache {
 		this.uuid = uuid;
 		this.privateKey = Buffer.alloc(0);
 		this.publicKey = Buffer.alloc(0);
-		this.pairedClients = {}; // pairedClients[clientUsername:string] = clientPublicKey:Buffer
+		this.pairedClients = {};
 		this.configVersion = 1;
 		this.configHash = '';
 
@@ -85,6 +99,9 @@ class AccessoryCache extends AbstractCache {
 	 * @param {Buffer} publicKey 
 	 */
 	addPairedClient(username, publicKey) {
+		if (!publicKey instanceof Buffer) {
+			publicKey = Buffer.from(publicKey, 'hex');
+		}
 		this.pairedClients[username] = publicKey;
 	}
 
@@ -124,18 +141,22 @@ class AccessoryCache extends AbstractCache {
 	 * @memberof AccessoryCache
 	 */
 	save() {
-		const values = { 
-			pairedClients, setupID, configVersion, configHash 
+		const {
+			setupID, configVersion, configHash, privateKey, publicKey
 		} = this;
 
-		values.privateKey = this.privateKey.toString('hex');
-		values.publicKey = this.publicKey.toString('hex');
+		const values = {
+			pairedClients: {}, setupID, configVersion, configHash
+		};
 
-		for (const username in values.pairedClients) {
-			values.pairedClients[username] = values.pairedClients[username].toString('hex');
+		values.privateKey = privateKey.toString('hex');
+		values.publicKey = publicKey.toString('hex');
+
+		for (const username in this.pairedClients) {
+			values.pairedClients[username] = this.pairedClients[username].toString('hex');
 		}
 
-		AccessoryCache.writeCacheFile(this.uuid + '.Accessory');
+		AccessoryCache.writeCacheFile(this.uuid + '.Accessory', values);
 	}
 
 	/**

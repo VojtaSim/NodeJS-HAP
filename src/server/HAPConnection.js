@@ -5,8 +5,7 @@ const EventEmitter = require('events');
 const net = require('net');
 const http = require('http');
 const uuid = require('uuid/v5');
-
-module.exports = HAPConnection;
+const encryption = require('../encryption/encryption');
 
 /**
  * Manages a single iOS-initiated HTTP connection during its lifetime.
@@ -19,7 +18,7 @@ class HAPConnection extends EventEmitter {
 	constructor(clientSocket) {
 		super();
 
-		this.sessionID = uuid(clientSocket.remoteAddress + ':' + clientSocket.remotePort);
+		this.sessionID = uuid(clientSocket.remoteAddress + ':' + clientSocket.remotePort, uuid.URL);
 
 		this._remoteAddress = clientSocket.remoteAddress; // cache because it becomes undefined in 'onClientSocketClose'
 		this._pendingClientSocketData = Buffer.alloc(0); // data received from client before HTTP proxy is fully setup
@@ -267,3 +266,5 @@ class HAPConnection extends EventEmitter {
 		}
 	}
 }
+
+module.exports = HAPConnection;

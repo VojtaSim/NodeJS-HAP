@@ -1,5 +1,5 @@
 const bonjour = require('bonjour-hap');
-const os = require('os');
+const debug = require('debug')('Advertiser');
 const crypto = require('crypto');
 
 /**
@@ -29,23 +29,22 @@ class Advertiser {
 	}
 
 	startAdvertising(port) {
-
 		// stop advertising if necessary
 		if (this._advertisement) {
 			this.stopAdvertising();
 		}
 
-		const { displayName, username, category } = this.accessoryInfo;
+		const { displayName, username, category } = this.accessoryInfo;
 		const { configVersion } = this.accessoryCache;
+
+		debug(`[${displayName}] Starting advertising over bonjour.`);
 
 		const txtRecord = {
 			md: displayName,
 			pv: "1.0",
 			id: username,
-			// "accessory conf" - represents the "configuration version" of an Accessory. Increasing this "version number" signals iOS devices to re-fetch /accessories data.
-			"c#": configVersion.toString(),
-			// "accessory state"
-			"s#": "1",
+			"c#": configVersion + "", // "accessory conf" - represents the "configuration version" of an Accessory. Increasing this "version number" signals iOS devices to re-fetch /accessories data.
+			"s#": "1", // "accessory state"
 			"ff": "0",
 			"ci": category,
 			"sf": this.accessoryCache.isPaired() ? "0" : "1", // "sf == 1" means "discoverable by HomeKit iOS clients"
@@ -84,7 +83,7 @@ class Advertiser {
 	updateAdvertisement() {
 		if (this._advertisement) {
 			const { displayName, username, category } = this.accessoryInfo;
-			const { configVersion } = this.accessoryCache;
+			const {  configVersion } = this.accessoryCache;
 
 			const txtRecord = {
 				md: displayName,
@@ -99,23 +98,30 @@ class Advertiser {
 			};
 
 			this._advertisement.updateTxt(txtRecord);
+
+			debug(`[${displayName}] Advertising updated.`);
 		}
 	}
 
 	stopAdvertising() {
+		const { displayName } = this.accessoryInfo;
+		debug(`[${displayName}] Stopping advertising over bonjour.`);
+
 		if (this._advertisement) {
 			this._advertisement.stop();
-			this._advertisement.destroy();
 			this._advertisement = null;
 		}
 
-		this._bonjourService.destroy();
+		this._bonjourService.unpublishAll(() => {
+			debug(`[${displayName}] Destroying bonjour service.`);
+			this._bonjourService.destroy();
+		});
 	}
 
 	_computeSetupHash() {
 		const { username } = this.accessoryInfo;
 		const { setupID } = this.accessoryCache;
-		
+
 		const hash = crypto.createHash('sha512');
 		hash.update(setupID + username);
 

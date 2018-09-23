@@ -1,9 +1,13 @@
 const Accessory = require('./src/Accessory');
 
 // Our Accessories will each have their own HAP server; we will assign ports sequentially
-let targetPort = 51826;
+let targetPort = 51828;
 // Load all accessories in the /accessories folder
-const accessories = Accessory.load('accessories/*_accessory.js');
+const accessories = Accessory.load('examples/*_accessory.js');
+
+if (accessories.length === 0) {
+	console.log('No accessories found. Exiting.');
+}
 
 // Publish them all separately (as opposed to BridgedCore which publishes them behind a single Bridge accessory)
 accessories.forEach(accessory => {
@@ -28,12 +32,6 @@ accessories.forEach(accessory => {
 		port: targetPort++
 	});
 });
-
-const signals = { 'SIGINT': 2, 'SIGTERM': 15 };
-Object.keys(signals).forEach(signal => process.on(signal, () => {
-	accessories.forEach(accessory => accessory.unpublish());
-	setTimeout(() => process.exit(128 + signals[signal]), 1000);
-}));
 
 
 

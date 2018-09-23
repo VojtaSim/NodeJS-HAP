@@ -1,11 +1,9 @@
-const { Accessory, Service, Characteristic }
-const Accessory = require('../src/Accessory');
-const Service = require('../src/Service');
-const Characteristic = require('../src/Characteristic');
+const { Accessory, Service, Characteristic } = require('../index');
 const uuid = require('uuid/v3');
 
 const LightController = {
-	 // MAC like address used by HomeKit to differentiate accessories. 
+	 // MAC like address used by HomeKit to differentiate accessories.
+	name: "Simple Light",
 	manufacturer: "HAP-NodeJS", //manufacturer (optional)
 	model: "v1.0", //model (optional)
 	serialNumber: "A12S345KGB", //serial number (optional)
@@ -15,7 +13,7 @@ const LightController = {
 	hue: 0, //current hue
 	saturation: 0, //current saturation
 
-	outputLogs: false, //output logs
+	outputLogs: true, //output logs
 
 	setPower: function (status) { //set power of accessory
 		if (this.outputLogs) console.log("Turning the '%s' %s", this.name, status ? "on" : "off");
@@ -65,15 +63,15 @@ const LightController = {
 // Generate a consistent UUID for our light Accessory that will remain the same even when
 // restarting our server. We use the `uuid.generate` helper function to create a deterministic
 // UUID based on an arbitrary "namespace" and the word "light".
-const lightUUID = uuid('hap-nodejs.accessories.light', uuid.DNS);
+const lightUUID = uuid('hap.accessories.lightbulb', uuid.DNS);
 
 // This is the Accessory that we'll return to HAP-NodeJS that represents our light.
 const lightAccessory = module.exports = new Accessory(
 	lightUUID,
 	{
-		name: "Simple Light", //name of accessory
-		pincode: "031-45-154",
-		username: "FA:3C:ED:5A:1A:1A",
+		displayName: "Simple Light", //name of accessory
+		pincode: "123-44-567",
+		username: "3C:2A:8D:4B:3D:5B",
 		category: Accessory.Categories.LIGHTBULB
 	}
 );
@@ -81,9 +79,9 @@ const lightAccessory = module.exports = new Accessory(
 // set some basic properties (these values are arbitrary and setting them is optional)
 lightAccessory
 	.getService(Service.AccessoryInformation)
-	.setCharacteristic(Characteristic.Manufacturer, LightController.manufacturer)
-	.setCharacteristic(Characteristic.Model, LightController.model)
-	.setCharacteristic(Characteristic.SerialNumber, LightController.serialNumber);
+	.setCharacteristicValue(Characteristic.Manufacturer, LightController.manufacturer)
+	.setCharacteristicValue(Characteristic.Model, LightController.model)
+	.setCharacteristicValue(Characteristic.SerialNumber, LightController.serialNumber);
 
 // listen for the "identify" event for this Accessory
 lightAccessory.on('identify', async isPaired => {

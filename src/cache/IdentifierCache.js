@@ -30,11 +30,11 @@ class IdentifierCache extends AbstractCache {
 			);
 
 			const identifiers = new IdentifierCache(uuid);
-			identifiers._cache = savedCache;
+			Object.assign(identifiers._cache, savedCache);
 			//calculate hash of the saved hash to decide in future if saving of new cache is neeeded
 			identifiers._hash = crypto.createHash('sha1').update(JSON.stringify(identifiers._cache)).digest('hex');
 
-			return info;
+			return identifiers;
 
 		} catch (error) {
 			return null;
@@ -164,6 +164,11 @@ class IdentifierCache extends AbstractCache {
 			.filter(identifier => !identifier.includes('|'))
 			.map(identifier => this._cache[identifier]);
 
+		if (IDs.length === 0) {
+			// Pool of AIDs starts with 2 (1 is reserved for the main Accessory)
+			return (this._lastAID = 2);
+		}
+
 		return (this._lastAID = Math.max(...IDs) + 1);
 	}
 
@@ -175,11 +180,16 @@ class IdentifierCache extends AbstractCache {
 	 */
 	getNextIID(accessoryUUID) {
 		if (this._lastIID && this._lastIID[accessoryUUID]) {
-			return ++this._lastAID[accessoryUUID];
+			return ++this._lastIID[accessoryUUID];
 		}
-		const IDs = Object.keys(this._cache)
+		let IDs = Object.keys(this._cache)
 			.filter(identifier => identifier.includes(accessoryUUID + '|'))
 			.map(identifier => this._cache[identifier]);
+
+		if (IDs.length === 0) {
+			// Pool of IIDs starts with 2 (1 is reserved for AccessoryInformation service)
+			return (this._lastIID[accessoryUUID] = 2);
+		}
 
 		return (this._lastIID[accessoryUUID] = Math.max(...IDs) + 1);
 	}
@@ -196,7 +206,7 @@ class IdentifierCache extends AbstractCache {
 		}
 		IdentifierCache.writeCacheFile(
 			IdentifierCache.getCacheFilename(this.uuid),
-			this._cache
+			Object.assign({}, this._cache)
 		);
 		this._hash = newCacheHash;
 	}

@@ -34,9 +34,9 @@ class AbstractCache extends Cache {
 	 * @returns {Object}
 	 */
 	static readCacheFile(fileName) {
-		const filePath = Cache._getFilePath(fileName);
+		const filePath = AbstractCache._getFilePath(fileName);
 
-		if (!fs.existsSync(filePath) || !fs.statSync(path).isFile()) {
+		if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
 			throw new Error(`Unable to load file '${filePath}'.`);
 		}
 
@@ -50,7 +50,7 @@ class AbstractCache extends Cache {
 	 * @param {Object} data 
 	 */
 	static writeCacheFile(fileName, data) {
-		const filePath = Cache._getFilePath(fileName);
+		const filePath = AbstractCache._getFilePath(fileName);
 
 		fs.writeFileSync(filePath, JSON.stringify(data), 'utf8');
 	}
@@ -61,7 +61,7 @@ class AbstractCache extends Cache {
 	 * @param {string} fileName
 	 */
 	static deleteCacheFile(fileName) {
-		const filePath = Cache._getFilePath(fileName);
+		const filePath = AbstractCache._getFilePath(fileName);
 
 		if (fs.existsSync(filePath) && fs.statSync(path).isFile()) {
 			fs.unlinkSync(filePath);
@@ -75,7 +75,7 @@ class AbstractCache extends Cache {
 	 * @returns {string}
 	 */
 	static _getFilePath (fileName) {
-		return Cache._storagePath + path.sep + fileName + '.json';
+		return AbstractCache._storagePath + path.sep + fileName + '.json';
 	}
 }
 

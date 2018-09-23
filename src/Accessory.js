@@ -3,11 +3,13 @@ const glob = require('glob');
 const debug = require('debug')('Accessory');
 const crypto = require('crypto');
 const EventEmitter = require('events');
+const HAPServer = require('./server/HAPServer');
 const Service = require('./Service');
 const Characteristic = require('./Characteristic');
 const Advertiser = require('./Advertiser');
 const AccessoryCache = require('./cache/AccessoryCache');
 const IdentifierCache = require('./cache/IdentifierCache');
+const nodeCleanup = require('node-cleanup');
 
 /**
  * Accessory is a virtual HomeKit device. It can publish an associated HAP server for iOS devices to communicate
@@ -47,7 +49,6 @@ class Accessory extends EventEmitter {
 		const accessoryFiles = glob.sync(searchPattern, { absolute: true });
 
 		accessoryFiles.forEach(file => {
-			console.log(file);
 			let loadedAccessory = require(file);
 
 			if (!Array.isArray(loadedAccessory)) {
@@ -86,11 +87,11 @@ class Accessory extends EventEmitter {
 		// create our initial "Accessory Information" Service that all Accessories are expected to have
 		this
 			.addService(Service.AccessoryInformation)
-			.setCharacteristic(Characteristic.Name, this.info.displayName)
-			.setCharacteristic(Characteristic.Manufacturer, "Default-Manufacturer")
-			.setCharacteristic(Characteristic.Model, "Default-Model")
-			.setCharacteristic(Characteristic.SerialNumber, "Default-SerialNumber")
-			.setCharacteristic(Characteristic.FirmwareRevision, "1.0");
+			.setCharacteristicValue(Characteristic.Name, this.info.displayName)
+			.setCharacteristicValue(Characteristic.Manufacturer, "Default-Manufacturer")
+			.setCharacteristicValue(Characteristic.Model, "Default-Model")
+			.setCharacteristicValue(Characteristic.SerialNumber, "Default-SerialNumber")
+			.setCharacteristicValue(Characteristic.FirmwareRevision, "1.0");
 
 		// sign up for when iOS attempts to "set" the Identify characteristic - this means a paired device wishes
 		// for us to identify ourselves (as opposed to an unpaired device - that case is handled by HAPServer 'identify' event)
@@ -108,10 +109,10 @@ class Accessory extends EventEmitter {
 	 */
 	get setupURL() {
 		const { pincode, category, displayName } = this.info;
-		const { setupID } = this._cache;
+		const { setupID } = this.cache;
 
 		if (!(pincode && setupID)) {
-			debug('[%s] Cannot get setupURL because pin-code and setupID are unknown.', displayName);
+			debug(`[${displayName}] Cannot get setupURL because pin-code and setupID are unknown.`);
 			return;
 		}
 
@@ -122,8 +123,8 @@ class Accessory extends EventEmitter {
 		const buffer = Buffer.alloc(8);
 		const setupCode = parseInt(pincode.replace(/-/g, ''), 10);
 
-		const value_low = setupCode;
-		const value_high = category >> 1;
+		let value_low = setupCode;
+		let value_high = category >> 1;
 
 		value_low |= 1 << 28; // Supports IP;
 
@@ -135,7 +136,7 @@ class Accessory extends EventEmitter {
 
 		buffer.writeUInt32BE(value_high, 0);
 
-		const encodedPayload = (
+		let encodedPayload = (
 			buffer.readUInt32BE(4) +
 			(buffer.readUInt32BE(0) * Math.pow(2, 32))
 		).toString(36).toUpperCase();
@@ -165,7 +166,6 @@ class Accessory extends EventEmitter {
 	 * @param {Function|Service} service 
 	 */
 	addService(service, ...args) {
-		console.log(service);
 
 		// service might be a constructor like `Service.AccessoryInformation` 
 		// instead of an instance of Service. Coerce if necessary.
@@ -175,7 +175,7 @@ class Accessory extends EventEmitter {
 
 		// check for UUID+subtype conflict
 		const duplicitService = this.services
-			.find(existingService => existingService.UUID === service.UUID);
+			.find(existingService => existingService.uuid === service.UUID);
 
 		if (duplicitService) {
 			// OK we have two Services with the same UUID. Check that each 
@@ -188,8 +188,6 @@ class Accessory extends EventEmitter {
 				throw new Error(`Cannot add a Service with the same UUID '${duplicitService.UUID}' and subtype '${duplicitService.subtype}' as another Service in this Accessory.`);
 			}
 		}
-
-		console.log(service);
 
 		this.services.push(service);
 
@@ -348,7 +346,6 @@ class Accessory extends EventEmitter {
 	toHAP(options) {
 		const servicesHAP = [];
 
-		console.log(this.services);
 		this.services.forEach(
 			service => servicesHAP.push(service.toHAP(options))
 		);
@@ -437,8 +434,14 @@ class Accessory extends EventEmitter {
 			'server-connection-close',
 			(connection, events) => this._onServerConnectionClose(events)
 		);
+		this._server.on(
+			'server-stop',
+			() => this._onServerStop()
+		);
 
 		this._server.listen(this.info.port || 0);
+
+		nodeCleanup((code, signal) => this.unpublish());
 	}
 
 	/**
@@ -464,11 +467,12 @@ class Accessory extends EventEmitter {
 	 * @memberof Accessory
 	 */
 	unpublish() {
-		this._server.stop();
+		if (this._server) {
+			this._server.stop();
+		}
 
 		if (this._advertiser) {
 			this._advertiser.stopAdvertising();
-			this._advertiser = undefined;
 		}
 	}
 
@@ -500,8 +504,8 @@ class Accessory extends EventEmitter {
 	async handlePair(username, publicKey) {
 		debug(`[${this.info.displayName}] Paired with client ${username}`);
 
-		this._cache.addPairedClient(username, publicKey);
-		this._cache.save();
+		this.cache.addPairedClient(username, publicKey);
+		this.cache.save();
 
 		// update our advertisement so it can pick up on the paired status of AccessoryCache
 		this._advertiser.updateAdvertisement();
@@ -533,7 +537,7 @@ class Accessory extends EventEmitter {
 		// make sure our aid/iid's are all assigned
 		this._assignIDs(this._identifierCache);
 
-		return this.toHAP();
+		return { accessories: this.toHAP() };
 	}
 
 	/**
@@ -546,7 +550,7 @@ class Accessory extends EventEmitter {
 	 */
 	async handleGetCharacteristics(data, events, connectionID) {
 		// traverse through the requested characteristics and asynchronously obtain value for each one.
-		return data.map(async characteristicData => {
+		return Promise.all(data.map(async characteristicData => {
 			const { aid, iid } = characteristicData;
 			const characteristic = this.findCharacteristic(aid, iid);
 
@@ -565,7 +569,7 @@ class Accessory extends EventEmitter {
 				debug(`[${this.info.displayName}] Error getting value for Characteristic '${characteristic.displayName}': ${error.message}`);
 				return { status: hapStatus(error), aid, iid };
 			}
-		});
+		}));
 	}
 
 	/**
@@ -578,9 +582,9 @@ class Accessory extends EventEmitter {
 	 * @returns {Promise<Object>}
 	 */
 	async handleSetCharacteristics(data, events, connectionID) {
-		debug("[%s] Processing characteristic set: %s", this.displayName, JSON.stringify(data));
+		debug("[%s] Processing characteristic set: %s", this.info.displayName, JSON.stringify(data));
 
-		return data.map(async characteristicData => {
+		return Promise.all(data.map(async characteristicData => {
 			const { aid, iid, value, ev } = characteristicData;
 			const characteristic = this.findCharacteristic(aid, iid);
 
@@ -623,7 +627,7 @@ class Accessory extends EventEmitter {
 			} else {
 				return { status: HAPServer.Status.SUCCESS, aid, iid };
 			}
-		});
+		}));
 	}
 
 	/**
@@ -645,7 +649,7 @@ class Accessory extends EventEmitter {
 		if (this.bridged) {
 			// This Accessory is bridged, so it must have an aid > 1. Use the 
 			// provided identifierCache to fetch or assign one based on our UUID.
-			this.aid = identifierCache.getAID(this.uuid);
+			this.aid = identifierCache.getAID(this.uuxid);
 		} else {
 			// Since this Accessory is the server (as opposed to any 
 			// Accessories that may be bridged behind us), we must have aid = 1
@@ -712,7 +716,7 @@ class Accessory extends EventEmitter {
 	}
 
 	/**
-	 * Handler server-connection-close
+	 * Handles server-connection-close
 	 *
 	 * @param {Object} events 
 	 */
@@ -730,6 +734,13 @@ class Accessory extends EventEmitter {
 					}
 				} catch (error) { }
 			});
+	}
+
+	/**
+	 * Handles server-stop
+	 */
+	_onServerStop() {
+
 	}
 
 	/**

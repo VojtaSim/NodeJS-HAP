@@ -41,7 +41,7 @@ class Characteristic extends EventEmitter {
 			.filter(prop => props.hasOwnProperty(prop))
 			.forEach(prop => this.props[prop] = props[prop]);
 
-		//this._finishCharacteristicProps(this.props);
+		this._finishCharacteristicProps(this.props);
 
 		this.value = this.getDefaultValue();
 		this.subscriptions = 0;
@@ -166,7 +166,7 @@ class Characteristic extends EventEmitter {
 					this.emit('change', { oldValue: value, newValue, context });
 				}
 
-				return newValue;
+				return (this.value = newValue);
 
 			} catch (error) {
 				this.status = error;
@@ -324,6 +324,7 @@ class Characteristic extends EventEmitter {
 	 * @memberof Characteristic
 	 */
 	getDefaultValue() {
+
 		switch (this.props.format) {
 			case Characteristic.Formats.BOOL:
 				return false;
@@ -482,12 +483,12 @@ class Characteristic extends EventEmitter {
 	 */
 	_isNumericFormat() {
 		return [
-			CharacteristicProps.Formats.INT,
-			CharacteristicProps.Formats.FLOAT,
-			CharacteristicProps.Formats.UINT8,
-			CharacteristicProps.Formats.UINT16,
-			CharacteristicProps.Formats.UINT32,
-			CharacteristicProps.Formats.UINT64
+			Characteristic.Formats.INT,
+			Characteristic.Formats.FLOAT,
+			Characteristic.Formats.UINT8,
+			Characteristic.Formats.UINT16,
+			Characteristic.Formats.UINT32,
+			Characteristic.Formats.UINT64
 		].includes(this.format);
 	}
 }

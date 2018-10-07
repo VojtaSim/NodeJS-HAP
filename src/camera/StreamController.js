@@ -1,7 +1,7 @@
 'use strict';
 
 const debug = require('debug')('StreamController');
-const tlv = require('../encyption/tlv');
+const tlv = require('../encryption/tlv');
 const Service = require('../Service');
 const Characteristic = require('../Characteristic');
 const RTPProxy = require('./RTPProxy');
@@ -13,7 +13,7 @@ const HomeKitServices = require('../../generated/HomeKitServices');
 
 class StreamController {
 
-	constructor(identifier, options, cameraSource) {
+	constructor(identifier, options, cameraAccessory) {
 		if (identifier === undefined) {
 			throw new Error('Identifier cannot be undefined');
 		}
@@ -22,12 +22,12 @@ class StreamController {
 			throw new Error('Options cannot be undefined');
 		}
 
-		if (!cameraSource) {
+		if (!cameraAccessory) {
 			throw new Error('CameraSource cannot be undefined');
 		}
 
 		this.identifier = identifier;
-		this.cameraSource = cameraSource;
+		this.cameraAccessory = cameraAccessory;
 
 		this.requiresProxy = options.proxy || false;
 		this.disableAudioProxy = options.disableAudioProxy || false;
@@ -47,11 +47,11 @@ class StreamController {
 		this.supportedAudioStreamConfiguration = this._supportedAudioStreamConfiguration(audio);
 
 		this.selectedConfiguration = null;
-		this.sessionIdentifier = null;
+		this.sessionID = null;
 		this.streamStatus = StreamController.StreamingStatus.AVAILABLE;
 		this.videoOnly = false;
 
-		this._createService();
+		this._createStreamManagementService();
 	}
 
 	forceStop() {
@@ -76,7 +76,7 @@ class StreamController {
 	 * Constructs CameraRTPStreamManagement services and sets up all of its
 	 * required characteristics and read/write handlers.
 	 */
-	_createService() {
+	_createStreamManagementService() {
 		const managementService = new Service.CameraRTPStreamManagement(
 			undefined,
 			this.identifier.toString()
@@ -104,13 +104,13 @@ class StreamController {
 			.onGet(async () => this.supportedAudioStreamConfiguration);
 
 		managementService
-			.getCharacteristic(Characteristic.SelectedStreamConfiguration)
+			.getCharacteristic(Characteristic.SelectedRTPStreamConfiguration)
 			.onGet(async () => {
-				debug(`[${this.identifier}] Read SelectedStreamConfiguration`);
+				debug(`[${this.identifier}] Read SelectedRTPStreamConfiguration`);
 				return this.selectedConfiguration;
 			})
 			.onSet(async (value, context, connectionID) => {
-				debug(`[${this.identifier}] Write SelectedStreamConfiguration`);
+				debug(`[${this.identifier}] Write SelectedRTPStreamConfiguration`);
 				await this._handleSelectedStreamConfigurationWrite(value, connectionID);
 			});
 
@@ -119,7 +119,7 @@ class StreamController {
 			.onGet(async () => this._handleSetupRead())
 			.onSet(async (value) => await this._handleSetupWrite(value));
 
-		this.service = managementService;
+		this.streamManagementService = managementService;
 	}
 
 	/**
@@ -134,9 +134,9 @@ class StreamController {
 		const data = tlv.decode(Buffer.from(value, 'base64'));
 
 		if (data[StreamController.SelectedStreamConfigurationTypes.SESSION]) {
-			const session = tlv.decode(data[StreamController.SelectedStreamConfigurationTypes.SESSION]);
-			this.sessionIdentifier = session[0x01];
-			const requestType = session[0x02][0];
+			const sessionData = tlv.decode(data[StreamController.SelectedStreamConfigurationTypes.SESSION]);
+			this.sessionID = sessionData[0x01].toString('base64');
+			const requestType = sessionData[0x02][0];
 
 			switch (requestType) {
 				case 1: {
@@ -146,7 +146,8 @@ class StreamController {
 						this.connectionID = connectionID;
 					}
 	
-					this._handleStartStream(data, session, false);
+					this._handleStartStream(data, sessionData, false);
+					break;
 				}
 				case 0: {
 					if (this.connectionID && this.connectionID != connectionID) {
@@ -156,9 +157,11 @@ class StreamController {
 					}
 	
 					this._handleStopStream();
+					break;
 				}
 				case 4: {
-					this._handleStartStream(data, session, true);
+					this._handleStartStream(data, sessionData, true);
+					break;
 				}
 				default: {
 					debug("Unhandled request type: ", requestType);
@@ -180,7 +183,7 @@ class StreamController {
 	 */
 	_handleStartStream(data, session, reconfigure = false) {
 		const request = {
-			sessionID: this.sessionIdentifier,
+			sessionID: this.sessionID,
 			type: !reconfigure ? "start" : "reconfigure"
 		};
 
@@ -296,7 +299,7 @@ class StreamController {
 			}
 		}
 
-		this.cameraSource.handleStreamRequest(request);
+		this.cameraAccessory.handleStreamRequest(request);
 		this._updateStreamStatus(StreamController.StreamingStatus.STREAMING);
 	}
 
@@ -308,12 +311,12 @@ class StreamController {
 	 */
 	_handleStopStream(silent) {
 		const request = {
-			sessionID: this.sessionIdentifier,
+			sessionID: this.sessionID,
 			type: "stop"
 		};
 
 		if (!silent) {
-			this.cameraSource.handleStreamRequest(request);
+			this.cameraAccessory.handleStreamRequest(request);
 		}
 
 		if (this.requiresProxy) {
@@ -346,7 +349,7 @@ class StreamController {
 	 */
 	async _handleSetupWrite(data) {
 		data = tlv.decode(Buffer.from(data, 'base64'));
-		this.sessionIdentifier = data[StreamController.SetupTypes.SESSION_ID];
+		this.sessionID = data[StreamController.SetupTypes.SESSION_ID].toString('base64');
 
 		// Address
 		const targetAddressPayload = data[StreamController.SetupTypes.ADDRESS];
@@ -371,7 +374,7 @@ class StreamController {
 		const audioMasterSalt = processedAudioInfo[StreamController.SetupSRTP_PARAM.MASTER_SALT];
 
 		debug(
-			'\nSession: ', this.sessionIdentifier,
+			'\nSession: ', this.sessionID,
 			'\nControllerAddress: ', targetAddress,
 			'\nVideoPort: ', targetVideoPort,
 			'\nAudioPort: ', targetAudioPort,
@@ -384,7 +387,7 @@ class StreamController {
 		);
 
 		const request = {
-			sessionID: this.sessionIdentifier,
+			sessionID: this.sessionID,
 		};
 		const videoInfo = {};
 		const audioInfo = {};
@@ -407,8 +410,8 @@ class StreamController {
 			request.audio = audioInfo;
 
 			this._generateSetupResponse(
-				this.sessionIdentifier,
-				this.cameraSource.prepareStream(request)
+				this.sessionID,
+				this.cameraAccessory.prepareStream(request)
 			);
 		} else {
 			request.targetAddress = ip.address();
@@ -453,8 +456,8 @@ class StreamController {
 			request.audio = audioInfo;
 
 			this._generateSetupResponse(
-				this.sessionIdentifier,
-				this.cameraSource.prepareStream(request)
+				this.sessionID,
+				this.cameraAccessory.prepareStream(request)
 			);
 		}
 	}
@@ -462,10 +465,10 @@ class StreamController {
 	/**
 	 * Constructs setup response from a stream preparation response
 	 *
-	 * @param {string} identifier
+	 * @param {string} sessionID
 	 * @param {Object} response
 	 */
-	_generateSetupResponse(identifier, response) {
+	_generateSetupResponse(sessionID, response) {
 		const { video, audio } = response;
 
 		let ipVer = 0;
@@ -539,7 +542,7 @@ class StreamController {
 		});
 
 		const responseTLV = tlv.encode({
-			[StreamController.SetupTypes.SESSION_ID]: identifier,
+			[StreamController.SetupTypes.SESSION_ID]: Buffer.from(sessionID, 'base64'),
 			[StreamController.SetupTypes.STATUS]: StreamController.SetupStatus.SUCCESS,
 			[StreamController.SetupTypes.ADDRESS]: addressTLV,
 			[StreamController.SetupTypes.VIDEO_SRTP_PARAM]: videoSRTP,
@@ -560,7 +563,7 @@ class StreamController {
 	_updateStreamStatus(status) {
 		this.streamStatus = status;
 
-		this.service
+		this.streamManagementService
 			.getCharacteristic(Characteristic.StreamingStatus)
 			.setValue(
 				tlv
@@ -594,11 +597,10 @@ class StreamController {
 			throw new Error('Video resolutions cannot be undefined');
 		}
 
+		const { profiles, levels } = codec;
 		let videoCodecParamsTLV = tlv.encode({
 			[StreamController.VideoCodecParamTypes.PACKETIZATION_MODE]: StreamController.VideoCodecParamPacketizationModeTypes.NON_INTERLEAVED
 		});
-
-		const { profiles, levels } = codec;
 
 		profiles.forEach(value => {
 			const tlvBuffer = tlv.encode({
@@ -621,9 +623,14 @@ class StreamController {
 			}
 
 			const [width, height, fps] = resolution;
-			const imageWidth = Buffer.alloc(2).writeUInt16LE(width, 0);
-			const imageHeight = Buffer.alloc(2).writeUInt16LE(height, 0);
-			const frameRate = Buffer.alloc(1).writeUInt8(fps);
+			const imageWidth = Buffer.alloc(2);
+			imageWidth.writeUInt16LE(width, 0);
+
+			const imageHeight = Buffer.alloc(2);
+			imageHeight.writeUInt16LE(height, 0);
+
+			const frameRate = Buffer.alloc(1);
+			frameRate.writeUInt8(fps);
 
 			const videoAttrTLV = tlv.encode({
 				[StreamController.VideoAttributesTypes.IMAGE_WIDTH]: imageWidth,
@@ -660,37 +667,43 @@ class StreamController {
 		let hasSupportedCodec = false;
 
 		codecs.forEach(codecParam => {
-			let codec, bitrate, { type, samplerate } = codecParam;
+			let codec, bitrate, { type, sampleRate } = codecParam;
 
 			switch (type) {
+
 				case 'OPUS': {
 					codec = StreamController.AudioCodecTypes.OPUS;
 					bitrate = StreamController.AudioCodecParamBitRateTypes.VARIABLE;
 					hasSupportedCodec = true;
+					break;
 				}
 				case 'AAC-eld': {
 					codec = StreamController.AudioCodecTypes.AACELD;
 					bitrate = StreamController.AudioCodecParamBitRateTypes.VARIABLE;
 					hasSupportedCodec = true;
+					break;
 				}
 				default: {
-					debug("Unsupported codec: ", param_type);
+					debug("Unsupported codec: ", type);
 					return;
 				}
 			}
 
-			switch (samplerate) {
+			switch (sampleRate) {
 				case 8: {
-					samplerate = StreamController.AudioCodecParamSampleRateTypes.KHZ_8;
+					sampleRate = StreamController.AudioCodecParamSampleRateTypes.KHZ_8;
+					break;
 				}
 				case 16: {
-					samplerate = StreamController.AudioCodecParamSampleRateTypes.KHZ_16;
+					sampleRate = StreamController.AudioCodecParamSampleRateTypes.KHZ_16;
+					break;
 				}
 				case 24: {
-					samplerate = StreamController.AudioCodecParamSampleRateTypes.KHZ_24;
+					sampleRate = StreamController.AudioCodecParamSampleRateTypes.KHZ_24;
+					break;
 				}
 				default: {
-					debug("Unsupported sample rate: ", param_samplerate);
+					debug("Unsupported sample rate: ", sampleRate);
 					return;
 				}
 			}
@@ -698,7 +711,7 @@ class StreamController {
 			const audioParamTLV = tlv.encode({
 				[StreamController.AudioCodecParamTypes.CHANNEL]: 1,
 				[StreamController.AudioCodecParamTypes.BIT_RATE]: bitrate,
-				[StreamController.AudioCodecParamTypes.SAMPLE_RATE]: samplerate
+				[StreamController.AudioCodecParamTypes.SAMPLE_RATE]: sampleRate
 			});
 
 			const audioConfiguration = tlv.encode({
@@ -707,8 +720,8 @@ class StreamController {
 			});
 
 			audioConfigurationsBuffer = Buffer.concat([
-				audioConfigurationsBuffer, 
-				tlv.encode(0x01, audioConfiguration)
+				audioConfigurationsBuffer,
+				tlv.encode({ [0x01]: audioConfiguration })
 			]);
 		});
 
@@ -718,12 +731,12 @@ class StreamController {
 
 			const codec = StreamController.AudioCodecTypes.OPUS;
 			const bitrate = StreamController.AudioCodecParamBitRateTypes.VARIABLE;
-			const samplerate = StreamController.AudioCodecParamSampleRateTypes.KHZ_24;
+			const sampleRate = StreamController.AudioCodecParamSampleRateTypes.KHZ_24;
 
 			const audioParamTLV = tlv.encode({
 				[StreamController.AudioCodecParamTypes.CHANNEL]: 1,
 				[StreamController.AudioCodecParamTypes.BIT_RATE]: bitrate,
-				[StreamController.AudioCodecParamTypes.SAMPLE_RATE]: samplerate
+				[StreamController.AudioCodecParamTypes.SAMPLE_RATE]: sampleRate
 			});
 
 			const audioConfiguration = tlv.encode({

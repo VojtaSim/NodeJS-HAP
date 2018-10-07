@@ -71,7 +71,7 @@ const lightAccessory = module.exports = new Accessory(
 	{
 		displayName: "Simple Light", //name of accessory
 		pincode: "123-44-567",
-		username: "3C:2A:8D:4B:3D:5B",
+		username: "3C:2A:7D:4B:3D:5B",
 		category: Accessory.Categories.LIGHTBULB
 	}
 );

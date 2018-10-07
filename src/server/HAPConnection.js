@@ -85,7 +85,7 @@ class HAPConnection extends EventEmitter {
 		]);
 
 		// try to encrypt this data before sending it to the client
-		const encryptedData = this._encrypt(data);
+		const encryptedData = this._encrypt(data, this._session);
 
 		if (encryptedData) {
 			data = encryptedData;

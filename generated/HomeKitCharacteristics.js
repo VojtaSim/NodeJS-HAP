@@ -1656,7 +1656,7 @@ class SelectedRTPStreamConfiguration extends Characteristic {
 	constructor() {
 		super('Selected RTP Stream Configuration', '00000117-0000-1000-8000-0026BB765291', {
 			format: Characteristic.Formats.TLV8,
-			perms: [Characteristic.Perms.PAIRED_WRITE]
+			perms: [Characteristic.Perms.PAIRED_READ, Characteristic.Perms.PAIRED_WRITE]
 		});
 	}
 }

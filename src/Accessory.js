@@ -301,7 +301,7 @@ class Accessory extends EventEmitter {
 		return this.services.find(service => {
 			if (typeof name === 'string' && (service.displayName === name || service.name === name || service.subtype === name)) {
 				return true;
-			} else if (typeof name === 'function' && ((service instanceof name) || (name.UUID === service.UUID))) {
+			} else if (typeof name === 'function' && ((service instanceof name) || (name.UUID === service.uuid))) {
 				return true;
 			}
 		});

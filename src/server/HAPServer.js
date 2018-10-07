@@ -719,7 +719,7 @@ class HAPServer extends EventEmitter {
 			return;
 		}
 		try {
-			const accessories = await this.accessory.handleGetInfo();
+			const accessories = await this.accessory.handleGetInfo(events, session.sessionID);
 
 			response.writeHead(200, { "Content-Type": "application/hap+json" });
 			response.end(JSON.stringify(accessories));
@@ -829,7 +829,7 @@ class HAPServer extends EventEmitter {
 			return;
 		}
 
-		if (typeof this.handleResourceRequest !== 'function' || request.method !== "POST") {
+		if (typeof this.accessory.handleResourceRequest !== 'function' || request.method !== "POST") {
 			response.writeHead(405);
 			response.end();
 
@@ -841,7 +841,7 @@ class HAPServer extends EventEmitter {
 		try {
 			const resource = await this.accessory.handleResourceRequest(data);
 
-			response.writeHead(200, { "Content-Type": "image/jpeg" });
+			response.writeHead(200, { "Content-Type": "image/png" });
 			response.end(resource);
 
 		} catch (error) {

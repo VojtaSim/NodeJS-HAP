@@ -1,4 +1,4 @@
-# NodeJS-HAP-Server
+# NodeJS-HAP-Server
 
 A Node.js implementation of HomeKit Accessory Server. With this project, you
 should be able to create your own HomeKit Accessory on a Raspberry Pi, Intel

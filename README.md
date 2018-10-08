@@ -35,4 +35,4 @@ instance. To checkout how it's done see `examples/Core.js` and
 ## Documentation
 
 To fully understand how this library works and how to use it to its full
-potential check out the [Wiki](wiki).
+potential check out the [Wiki](https://github.com/VojtaSim/NodeJS-HAP-Server/wiki).

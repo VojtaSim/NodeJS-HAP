@@ -1,9 +1,9 @@
-const Accessory = require('./src/Accessory');
+const { Accessory } = require('../index');
 
 // Our Accessories will each have their own HAP server; we will assign ports sequentially
 let targetPort = 51828;
 // Load all accessories in the /accessories folder
-const accessories = Accessory.load('examples/*_accessory.js');
+const accessories = Accessory.load('accessories/*_accessory.js');
 
 if (accessories.length === 0) {
 	console.log('No accessories found. Exiting.');

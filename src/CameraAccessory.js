@@ -183,7 +183,7 @@ class CameraAccessory extends Accessory {
 		return new Promise((resolve, reject) => {
 			let imageBuffer = Buffer.alloc(0);
 			const ffmpegProcess = spawn(
-				'ffmpeg',
+				CameraAccessory.ffmpegBinary,
 				(
 					`-loglevel panic ` +
 					`${imageSource} ` +
@@ -365,10 +365,14 @@ class CameraAccessory extends Accessory {
 					`&pkt_size=${packetSize}`;
 			}
 
-			const ffmpegProcess = spawn('ffmpeg', ffmpegParams.split(' '), {
-				shell: true,
-				env: process.env
-			});
+			const ffmpegProcess = spawn(
+				CameraAccessory.ffmpegBinary,
+				ffmpegParams.split(' '),
+				{
+					shell: true,
+					env: process.env
+				}
+			);
 
 			debug(`Start streaming video from ${this.info.displayName} with ${width}x${height} @ ${vBitRate}kBit`);
 
@@ -418,5 +422,7 @@ class CameraAccessory extends Accessory {
 		});
 	}
 }
+
+CameraAccessory.ffmpegBinary = 'ffmpeg';
 
 module.exports = CameraAccessory;

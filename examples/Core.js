@@ -3,7 +3,7 @@ const { Accessory } = require('../index');
 // Our Accessories will each have their own HAP server; we will assign ports sequentially
 let targetPort = 51828;
 // Load all accessories in the /accessories folder
-const accessories = Accessory.load('accessories/*_accessory.js');
+const accessories = Accessory.load(__dirname + '/accessories/*_accessory.js');
 
 if (accessories.length === 0) {
 	console.log('No accessories found. Exiting.');
@@ -26,6 +26,10 @@ accessories.forEach(accessory => {
 			`All accessories are required to define a unique 'pincode' property.`
 		);
 	}
+
+	accessory.on('ready', port => {
+		console.log(`Accessory ${accessory.info.displayName} listening on port ${port}.`);
+	});
 
 	// publish this Accessory on the local network
 	accessory.publish({

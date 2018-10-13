@@ -157,6 +157,12 @@ class CameraAccessory extends Accessory {
 		);
 	}
 
+	/**
+	 * Returns image buffer for requested image resource
+	 *
+	 * @param {{ image-width: number, image-height: number }} data
+	 * @returns {Buffer}
+	 */
 	async handleResourceRequest(data) {
 		if (data['resource-type'] == 'image') {
 			return await this.handleSnapshotRequest({

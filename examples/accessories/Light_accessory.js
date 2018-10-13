@@ -1,4 +1,4 @@
-const { Accessory, Service, Characteristic } = require('../index');
+const { Accessory, Service, Characteristic } = require('../../index');
 const uuid = require('uuid/v3');
 
 const LightController = {

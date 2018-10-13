@@ -350,12 +350,10 @@ class Accessory extends EventEmitter {
 			service => servicesHAP.push(service.toHAP(options))
 		);
 
-		const accessoriesHAP = [{
+		return [{
 			aid: this.aid,
 			services: servicesHAP
 		}];
-
-		return accessoriesHAP;
 	}
 
 	/**
@@ -649,7 +647,7 @@ class Accessory extends EventEmitter {
 		if (this.bridged) {
 			// This Accessory is bridged, so it must have an aid > 1. Use the 
 			// provided identifierCache to fetch or assign one based on our UUID.
-			this.aid = identifierCache.getAID(this.uuxid);
+			this.aid = identifierCache.getAID(this.uuid);
 		} else {
 			// Since this Accessory is the server (as opposed to any 
 			// Accessories that may be bridged behind us), we must have aid = 1
@@ -679,22 +677,22 @@ class Accessory extends EventEmitter {
 	 * values since these are not part of the "configuration".
 	 */
 	_checkAndUpdateConfiguration() {
-		const config = this.toHAP({ omitValues: true });
-
-		// now convert it into a hash code and check it against the last one we made, if we have one
-		const shasum = crypto.createHash('sha1');
-		shasum.update(JSON.stringify(config));
-		const configHash = shasum.digest('hex');
-
-		if (configHash !== this._cache.configHash) {
-			// our configuration has changed! we'll need to bump our config version number
-			this._cache.configVersion++;
-			this._cache.configHash = configHash;
-
-			return this._cache.save();
-		}
-
 		if (this._advertiser && this._advertiser.isAdvertising()) {
+			const config = this.toHAP({ omitValues: true });
+
+			// now convert it into a hash code and check it against the last one we made, if we have one
+			const shasum = crypto.createHash('sha1');
+			shasum.update(JSON.stringify(config));
+			const configHash = shasum.digest('hex');
+
+			if (configHash !== this._cache.configHash) {
+				// our configuration has changed! we'll need to bump our config version number
+				this._cache.configVersion++;
+				this._cache.configHash = configHash;
+
+				return this._cache.save();
+			}
+
 			// update our advertisement so HomeKit on iOS can pickup new accessory
 			this._advertiser.updateAdvertisement();
 		}

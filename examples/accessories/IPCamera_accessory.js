@@ -1,4 +1,4 @@
-const { CameraAccessory, Service, Characteristic } = require('../index');
+const { CameraAccessory, Service, Characteristic } = require('../../index');
 const uuid = require('uuid/v3');
 
 const cameraUUID = uuid('hap.accessories.camera', uuid.DNS);

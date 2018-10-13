@@ -1,4 +1,5 @@
 const Accessory = require('./Accessory');
+const CameraAccessory = require('./CameraAccessory');
 
 /**
  * Bridge is a special type of HomeKit Accessory that hosts other Accessories "behind" it. This way you
@@ -42,10 +43,10 @@ class Bridge extends Accessory {
 
 		// Check for UUID conflict
 		const duplicitAccessory = this.bridgedAccessories
-			.find(otherAccessory => otherAccessory.UUID === accessory.UUID);
+			.find(otherAccessory => otherAccessory.uuid === accessory.uuid);
 
 		if (duplicitAccessory) {
-			throw new Error(`Cannot add a bridged Accessory with the same UUID as another bridged Accessory: ${duplicitAccessory.UUID}`);
+			throw new Error(`Cannot add a bridged Accessory with the same UUID as another bridged Accessory: ${duplicitAccessory.uuid}`);
 		}
 
 		// Listen for changes in ANY characteristics of ANY services on this Accessory
@@ -117,12 +118,12 @@ class Bridge extends Accessory {
 	/**
 	 * @inheritdoc
 	 */
-	toHAP(opt) {
-		const accessoriesHAP = super.toHAP(opt);
+	toHAP(options) {
+		const accessoriesHAP = super.toHAP(options);
 	
 		// now add any Accessories we are bridging
 		this.bridgedAccessories.forEach(accessory => {
-			const bridgedAccessoryHAP = accessory.toHAP(opt);
+			const bridgedAccessoryHAP = accessory.toHAP(options);
 
 			// bridgedAccessoryHAP is an array of accessories with one item - 
 			// extract it and add it to our own array
@@ -130,6 +131,23 @@ class Bridge extends Accessory {
 		});
 
 		return accessoriesHAP;
+	}
+
+	
+	/**
+	 * Returns image buffer for requested image resource
+	 *
+	 * @param {{ image-width: number, image-height: number }} data
+	 * @returns {Buffer}
+	 */
+	async handleResourceRequest(data) {
+		const cameraAccessory = this.bridgedAccessories.find(
+			accessory => accessory instanceof CameraAccessory
+		);
+
+		if (cameraAccessory) {
+			return await cameraAccessory.handleResourceRequest(data);
+		}
 	}
 
 	/**

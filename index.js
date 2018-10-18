@@ -5,6 +5,8 @@ const Service = require('./src/Service');
 const Characteristic = require('./src/Characteristic');
 const StreamController = require('./src/camera/StreamController');
 const HAPServer = require('./src/server/HAPServer');
+const AccessoryCache = require('./src/cache/AccessoryCache');
+const IdentifierCache = require('./src/cache/IdentifierCache');
 
 // ensure Characteristic subclasses are defined
 const HomeKitCharacteristics = require('./generated/HomeKitCharacteristics');
@@ -17,5 +19,7 @@ module.exports = {
   Service,
   Characteristic,
   StreamController,
-  HAPServer
+  HAPServer,
+  AccessoryCache,
+  IdentifierCache
 }

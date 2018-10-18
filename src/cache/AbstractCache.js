@@ -79,6 +79,6 @@ class AbstractCache extends Cache {
 	}
 }
 
-AbstractCache._storagePath = path.resolve(__dirname, '../../persist');
+AbstractCache._storagePath = path.resolve('./persist');
 
 module.exports = AbstractCache;

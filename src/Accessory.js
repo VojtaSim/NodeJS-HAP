@@ -396,6 +396,9 @@ class Accessory extends EventEmitter {
 	 *                               as a string like "031-45-154".
 	 */
 	publish(info = {}, allowInsecureRequest = false) {
+		if (this.info.category === Accessory.Categories.CAMERA) {
+			delete info.category;
+		}
 		this.info = Object.assign({}, this.info, info);
 
 		// create our IdentifierCache so we can provide clients with stable aid/iid's

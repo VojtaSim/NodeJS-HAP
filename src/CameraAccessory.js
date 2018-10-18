@@ -9,6 +9,7 @@ const fs = require('fs');
 class CameraAccessory extends Accessory {
 
 	constructor(cameraUUID, cameraInfo, cameraConfig) {
+		cameraInfo.category = Accessory.Categories.CAMERA;
 		super(cameraUUID, cameraInfo);
 
 		const {

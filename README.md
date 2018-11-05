@@ -4,7 +4,11 @@ A Node.js implementation of HomeKit Accessory Server. With this project, you
 should be able to create your own HomeKit Accessory on a Raspberry Pi, Intel
 Edison, or any other platform that can run Node.js.
 
-This project is inspired by and based on the original [HAP-NodeJS](https://github.com/KhaosT/HAP-NodeJS) project by [KhaosT](https://github.com/KhaosT).
+This project is inspired by and based on the original [HAP-NodeJS](https://github.com/KhaosT/HAP-NodeJS) project by [KhaosT](https://github.com/KhaosT) but has been refactored from the ground-up.
+- ES6, `async/await` and using native `Buffer`.
+- Gone is getting characteristic value through `EventEmitter`.
+- Camera accessory can be bridged (but still only one camera per bridge due to HAP limitations).
+- Customizable cache implementations.
 
 ## Installation
 

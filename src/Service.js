@@ -206,6 +206,18 @@ class Service extends EventEmitter {
 	}
 
 	/**
+	 * Shortcut for updating characteristic value
+	 * 
+	 * @param {string|Function|Characteristic} name 
+	 * @param {any} value 
+	 * @returns {this}
+	 */
+	updateCharacteristicValue(name, value) {
+		this.getCharacteristic(name).updateValue(value);
+		return this;
+	}
+
+	/**
 	 * Adds new {@code Characteristic} to the list of optional characteristics
 	 *
 	 * @param {Function|Characteristic)} characteristic

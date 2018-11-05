@@ -6,10 +6,17 @@ const crypto = require('crypto');
 const ip = require('ip');
 const fs = require('fs');
 
+const CAMERA_ENABLED_CATEGORIES = [
+	Accessory.Categories.CAMERA,
+	Accessory.Categories.VIDEO_DOORBELL
+];
+
 class CameraAccessory extends Accessory {
 
 	constructor(cameraUUID, cameraInfo, cameraConfig) {
-		cameraInfo.category = Accessory.Categories.CAMERA;
+		if (!cameraInfo.category || !CAMERA_ENABLED_CATEGORIES.includes[cameraInfo.category]) {
+			cameraInfo.category = Accessory.Categories.CAMERA
+		}
 		super(cameraUUID, cameraInfo);
 
 		const {

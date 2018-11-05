@@ -25,7 +25,7 @@ class Bridge extends Accessory {
 	 * Binds listeners for all necessary event emitted by the given accessory
 	 * and translates those events to this bridge.
 	 * 
-	 * @param {Accessory} accessory 		The bridged accessory
+	 * @param {Accessory|Accessory[]} accessory 		The bridged accessory
 	 * @param {boolean} [deferUpdate=false]	Whether to defer updating the
 	 * 										configuration.
 	 * @returns {Accessory}
@@ -109,13 +109,6 @@ class Bridge extends Accessory {
 	}
 
 	/**
-	 * Removes all registered accessories we're bridging.
-	 */
-	removeAllBridgedAccessories() {
-		this.removeBridgedAccessory(this.bridgedAccessories);
-	}
-
-	/**
 	 * @inheritdoc
 	 */
 	toHAP(options) {
@@ -133,7 +126,6 @@ class Bridge extends Accessory {
 		return accessoriesHAP;
 	}
 
-	
 	/**
 	 * Returns image buffer for requested image resource
 	 *

@@ -1,14 +1,10 @@
-declare namespace HAPNodeJS {
+declare namespace NodeJSHAPServer {
 
-    export interface uuid {
-        generate(data: string): string;
-        isValid(UUID: string): boolean;
-        unparse(bug: string, offset: number): string;
-    }
+    // Service
+    //
+    type EventService = "characteristic-change" | "service-configurationChange";
 
-    type EventService = "characteristic-change" | "service-configurationChange"
-
-    export interface IEventEmitterAccessory {
+    export interface IEventEmitterService {
         addListener(event: EventService, listener: Function): this;
         on(event: EventService, listener: Function): this;
         once(event: EventService, listener: Function): this;
@@ -21,11 +17,11 @@ declare namespace HAPNodeJS {
         listenerCount(type: string): number;
     }
 
-    export interface Service extends IEventEmitterAccessory {
+    export interface Service extends IEventEmitterService {
         new (displayName: string, UUID: string, subtype: string): Service;
 
         displayName: string;
-        UUID: string;
+        uuid: string;
         subtype: string;
         iid: string;
         characteristics: Characteristic[];
@@ -34,12 +30,15 @@ declare namespace HAPNodeJS {
         addCharacteristic(characteristic: Characteristic | Function): Characteristic;
         removeCharacteristic(characteristic: Characteristic): void;
         getCharacteristic(name: string | Function): Characteristic;
-        testCharacteristic(name: string): boolean;
-        setCharacteristic(name: string | Function, value: string): Service;
-        updateCharacteristic(name: string, value: string): Service;
+        hasCharacteristic(name: string | Function): boolean;
+        getCharacteristicValue(name: string | Function): any;
+        setCharacteristicValue(name: string | Function, value: any): Service;
+        updateCharacteristicValue(name: string | Function, value: any): Service;
         addOptionalCharacteristic(characteristic: Characteristic | Function): void;
         getCharacteristicByIID(iid: string): Characteristic;
-
+        setHiddenService(isHidden: boolean): void;
+        addLinkedService(newLinkedService: Service): void;
+        removeLinkedService(oldLinkedService: Service): void;
         toHAP(opt: any): JSON;
 
         AccessoryInformation: Service;
@@ -82,35 +81,9 @@ declare namespace HAPNodeJS {
         WindowCovering: Service;
     }
 
-    export interface CameraSource {
-
-    }
-
-    type EventAccessory = "service-configurationChange" | "service-characteristic-change" | "identify"
-
-    export interface IEventEmitterAccessory {
-        addListener(event: EventAccessory, listener: Function): this;
-        on(event: EventAccessory, listener: Function): this;
-        once(event: EventAccessory, listener: Function): this;
-        removeListener(event: EventAccessory, listener: Function): this;
-        removeAllListeners(event?: EventAccessory): this;
-        setMaxListeners(n: number): this;
-        getMaxListeners(): number;
-        listeners(event: EventAccessory): Function[];
-        emit(event: EventAccessory, ...args: any[]): boolean;
-        listenerCount(type: string): number;
-    }
-
-    export interface CharacteristicProps {
-        format: Characteristic.Formats;
-        unit: Characteristic.Units,
-        minValue: number,
-        maxValue: number,
-        minStep: number,
-        perms: Characteristic.Perms[]
-    }
-
-    type EventCharacteristic = "get" | "set"
+    // Characteristic
+    //
+    type EventCharacteristic = "change";
 
     export interface IEventEmitterCharacteristic {
         addListener(event: EventCharacteristic, listener: Function): this;
@@ -125,17 +98,28 @@ declare namespace HAPNodeJS {
         listenerCount(type: string): number;
     }
 
+    export interface CharacteristicProps {
+        format: Characteristic.Formats;
+        unit: Characteristic.Units,
+        minValue: number,
+        maxValue: number,
+        minStep: number,
+        perms: Characteristic.Perms[]
+    }
+
     export interface Characteristic extends IEventEmitterCharacteristic {
-        new (displayName: string, UUID: string, props?: CharacteristicProps): Characteristic;
+        new (displayName: string, characteristicUUID: string, props?: CharacteristicProps): Characteristic;
 
         Formats: typeof Characteristic.Formats;
         Units: typeof Characteristic.Units;
         Perms: typeof Characteristic.Perms;
 
-        setProps(props: CharacteristicProps): Characteristic
-        getValue(callback?: (error: Error, value: boolean | string | number) => void, context?: any, connectionID?: string): void;
-        setValue(newValue: boolean | string | number, callback?: (error: Error) => void, context?: any, connectionID?: string): Characteristic;
-        updateValue(newValue: boolean | string | number, callback?: () => void, context?: any): Characteristic;
+        onGet(callback: (context?: any, connectionID?: string) => Promise<any>): Characteristic;
+        onSet(callback: (value: any, context?: any, connectionID?: string) => Promise<any>): Characteristic;
+        setProps(props: CharacteristicProps): Characteristic;
+        async getValue(context?: any, connectionID?: string): void;
+        async setValue(newValue: boolean | string | number, context?: any, connectionID?: string): Characteristic;
+        async updateValue(newValue: boolean | string | number, context?: any): Characteristic;
         getDefaultValue(): boolean | string | number;
         toHAP(opt: any): JSON;
 
@@ -260,7 +244,6 @@ declare namespace HAPNodeJS {
         WaterLevel: Characteristic;
     }
 
-
     module Characteristic {
         export enum Formats {
             BOOL,
@@ -294,43 +277,64 @@ declare namespace HAPNodeJS {
         }
     }
 
+    // Accessory
+    //
+    type EventAccessory = "service-configurationChange" | "service-characteristic-change" | "identify"
+
+    export interface IEventEmitterAccessory {
+        addListener(event: EventAccessory, listener: Function): this;
+        on(event: EventAccessory, listener: Function): this;
+        once(event: EventAccessory, listener: Function): this;
+        removeListener(event: EventAccessory, listener: Function): this;
+        removeAllListeners(event?: EventAccessory): this;
+        setMaxListeners(n: number): this;
+        getMaxListeners(): number;
+        listeners(event: EventAccessory): Function[];
+        emit(event: EventAccessory, ...args: any[]): boolean;
+        listenerCount(type: string): number;
+    }
+
+    export interface AccessoryInfo {
+        displayName: string,
+        port: number;
+        username: string;
+        pincode: string;
+        category: Accessory.Categories;
+    }
+
     export interface PublishInfo {
         port: number;
         username: string;
         pincode: string;
-        category: number;
     }
 
     export interface Accessory extends IEventEmitterAccessory {
-        new (displayName: string, UUID: string): Accessory;
-        displayName: string;
-        username: string;
-        pincode: string;
-        UUID: string;
+        new (accessoryUUID: string, accessoryInfo: AccessoryInfo): Accessory;
+
+        uuid: string;
         aid: string;
+        info: AccessoryInfo;
+        setupURL: string;
         bridged: boolean;
-        bridgedAccessories: Accessory[];
-        reachable: boolean;
-        category: Accessory.Categories;
         services: Service[];
-        cameraSource: CameraSource;
-        Categories: typeof Accessory.Categories
-        addService(service: Service | Function): Service;
+        Categories: typeof Accessory.Categories;
+
+        static load(searchPattern: string): Accessory[];
+
+        addService(service: Service | Function, ...args: any[]): Service;
+        setPrimaryService(service: Service): void;
         removeService(service: Service): void;
         getService(name: string | Function): Service;
-        updateReachability(reachable: boolean): void;
-        addBridgedAccessory(accessory: Accessory, deferUpdate: boolean): Accessory;
-        addBridgedAccessories(accessories: Accessory[]): void
-        removeBridgedAccessory(accessory: Accessory, deferUpdate: boolean): void;
-        removeBridgedAccessories(accessories: Accessory[]): void;
+        
         getCharacteristicByIID(iid: string): Characteristic;
-        getBridgedAccessoryByAID(aid: string): Accessory;
         findCharacteristic(aid: string, iid: string): Accessory;
-        configureCameraSource(cameraSource: CameraSource): void;
-        toHAP(opt: any): JSON;
+        toHAP(options: any): JSON;
         publish(info: PublishInfo, allowInsecureRequest: boolean): void;
         destroy(): void;
-        setupURI(): string;
+        unpublish(): void;
+        purgeUnusedIDs(): void;
+        disableUnusedIDPurge(): void;
+        enableUnusedIDPurge(): void;
     }
 
     module Accessory {
@@ -355,19 +359,268 @@ declare namespace HAPNodeJS {
         }
     }
 
-    export interface HAPNodeJS {
-        init(storagePath?: string): void,
-        uuid: uuid,
-        Accessory: Accessory,
-        Service: any,
-        Characteristic: any
+    // Bridge
+    //
+    export interface Bridge extends Accessory {
+        bridgedAccessories: Accessory[];
+
+        addBridgedAccessory(accessory: Accessory | Accessory[], deferUpdate: boolean): Accessory | Accessory[];
+        getBridgedAccessoryByAID(aid: string): Accessory;
+        removeBridgedAccessory(accessory: Accessory | Accessory[], deferUpdate: boolean): void;
     }
 
+    // Camera Accessory
+    //
+    export interface CameraConfig {
+        source: String;
+        stillImageSource: String;
+        vCodec: String = 'libx264';
+        aCodec: String = 'libfdk_aac';
+        audioEnabled: Boolean;
+        packetSize: Number = 1316;
+        maxFps: Number = 10,
+        maxBitrate: Number = 300,
+        streams: Number = 2;
+        maxWidth: Number = 1280;
+        maxHeight: Number = 720;
+    }
 
+    export interface StreamOptions {
+        proxy: Boolean,
+        strp: Boolean,
+        video: {
+            resolutions: [[Number, Number, Number]],
+            codec: {
+                profiles: Number[],
+                levels: Number[]
+            }
+        },
+        audio: {
+            codecs: [
+                {
+                    type: String,
+                    sampleRate: Number
+                }
+            ]
+        }
+    }
+
+    export interface CameraAccessory extends Accessory {
+        static ffmpegBinary: String;
+
+        new (cameraUUID: string, cameraInfo: AccessoryInfo, cameraConfig: CameraConfig): CameraAccessory;
+
+        createCameraControlServices(numberOfStreams: Number, streamOptions: StreamOptions): void;
+    }
+
+    export interface StreamController {
+        new (identifier: Number, options: StreamOptions, cameraAccessory: CameraAccessory): StreamController;
+    }
+
+    module StreamController {
+        export enum SetupTypes {
+            SESSION_ID = 0x01,
+            STATUS = 0x02,
+            ADDRESS = 0x03,
+            VIDEO_SRTP_PARAM = 0x04,
+            AUDIO_SRTP_PARAM = 0x05,
+            VIDEO_SSRC = 0x06,
+            AUDIO_SSRC = 0x07
+        }
+        
+        export enum SetupStatus {
+            SUCCESS = 0x00,
+            BUSY = 0x01,
+            ERROR = 0x02
+        }
+        
+        export enum SetupAddressVer {
+            IPV4 = 0x00,
+            IPV6 = 0x01
+        }
+        
+        export enum SetupAddressInfo {
+            ADDRESS_VER = 0x01,
+            ADDRESS = 0x02,
+            VIDEO_RTP_PORT = 0x03,
+            AUDIO_RTP_PORT = 0x04
+        }
+        
+        export enum SetupSRTP_PARAM {
+            CRYPTO = 0x01,
+            MASTER_KEY = 0x02,
+            MASTER_SALT = 0x03
+        }
+        
+        export enum StreamingStatus {
+            AVAILABLE = 0x00,
+            STREAMING = 0x01,
+            BUSY = 0x02
+        }
+        
+        export enum RTPConfigTypes {
+            CRYPTO = 0x02
+        }
+        
+        export enum SRTPCryptoSuites {
+            AES_CM_128_HMAC_SHA1_80 = 0x00,
+            AES_CM_256_HMAC_SHA1_80 = 0x01,
+            NONE = 0x02
+        }
+        
+        export enum VideoTypes {
+            CODEC = 0x01,
+            CODEC_PARAM = 0x02,
+            ATTRIBUTES = 0x03,
+            RTP_PARAM = 0x04
+        }
+        
+        export enum VideoCodecTypes {
+            H264 = 0x00
+        }
+        
+        export enum VideoCodecParamTypes {
+            PROFILE_ID = 0x01,
+            LEVEL = 0x02,
+            PACKETIZATION_MODE = 0x03,
+            CVO_ENABLED = 0x04,
+            CVO_ID = 0x05
+        }
+        
+        export enum VideoCodecParamCVOTypes {
+            UNSUPPORTED = 0x01,
+            SUPPORTED = 0x02
+        }
+        
+        export enum VideoCodecParamProfileIDTypes {
+            BASELINE = 0x00,
+            MAIN = 0x01,
+            HIGH = 0x02
+        }
+        
+        export enum VideoCodecParamLevelTypes {
+            TYPE3_1 = 0x00,
+            TYPE3_2 = 0x01,
+            TYPE4_0 = 0x02
+        }
+        
+        export enum VideoCodecParamPacketizationModeTypes {
+            NON_INTERLEAVED = 0x00
+        }
+        
+        export enum VideoAttributesTypes {
+            IMAGE_WIDTH = 0x01,
+            IMAGE_HEIGHT = 0x02,
+            FRAME_RATE = 0x03
+        }
+        
+        export enum SelectedStreamConfigurationTypes {
+            SESSION = 0x01,
+            VIDEO = 0x02,
+            AUDIO = 0x03
+        }
+        
+        export enum RTPParamTypes {
+            PAYLOAD_TYPE = 0x01,
+            SYNCHRONIZATION_SOURCE = 0x02,
+            MAX_BIT_RATE = 0x03,
+            RTCP_SEND_INTERVAL = 0x04,
+            MAX_MTU = 0x05,
+            COMFORT_NOISE_PAYLOAD_TYPE = 0x06
+        }
+        
+        export enum AudioTypes {
+            CODEC = 0x01,
+            CODEC_PARAM = 0x02,
+            RTP_PARAM = 0x03,
+            COMFORT_NOISE = 0x04
+        }
+        
+        export enum AudioCodecTypes {
+            PCMU = 0x00,
+            PCMA = 0x01,
+            AACELD = 0x02,
+            OPUS = 0x03
+        }
+        
+        export enum AudioCodecParamTypes {
+            CHANNEL = 0x01,
+            BIT_RATE = 0x02,
+            SAMPLE_RATE = 0x03,
+            PACKET_TIME = 0x04
+        }
+        
+        export enum AudioCodecParamBitRateTypes {
+            VARIABLE = 0x00,
+            CONSTANT = 0x01
+        }
+        
+        export enum AudioCodecParamSampleRateTypes {
+            KHZ_8 = 0x00,
+            KHZ_16 = 0x01,
+            KHZ_24 = 0x02
+        }
+    }
+
+    // Abstract Cache
+    //
+    export interface AbstractCache {
+        static storagePath: String;
+    
+        static readCacheFile(fileName: String): JSON;
+        static writeCacheFile(fileName: String, data: Object): void;
+        static deleteCacheFile(fileName: String): void;
+    }
+
+    // Accessory Cache
+    //
+    export interface AccessoryCache extends AbstractCache {
+        static create(uuid: String): AccessoryCache;
+        static load(uuid: String): AccessoryCache | null;
+
+        new (uuid: String): AccessoryCache;
+    
+        addPairedClient(username: String, publicKey: Buffer): void;
+        removePairedClient(username: String): void;
+        getClientPublicKey(username: String): Buffer | undefined;
+        isPaired(): Boolean;
+        save(): void;
+        remove(): void;
+    }
+
+    export interface IdentifierCache extends AbstractCache {
+        static load(uuid: String): IdentifierCache;
+    
+        new (uuid: String): IdentifierCache;
+    
+        startTrackingUsage(): void;
+        stopTrackingUsageAndExpireUnused(): void;
+    
+        getCache(key: String): Number;
+        setCache(key: String, value: Number): Number;
+        getAID(accessoryUUID: String): Number;
+        getIID(accessoryUUID: String, serviceUUID: String, serviceSubtype?: String, characteristicUUID?: String): Number;
+        getNextAID(): Number;
+        getNextIID(accessoryUUID: String): Number;
+        save(): void;
+        remove(): void;
+    }
+
+    export interface NodeJSHAPServer {
+        Accessory: Accessory,
+        Bridge: Bridge,
+        CameraAccessory: CameraAccessory,
+        StreamController: StreamController,
+        Service: Service,
+        Characteristic: Characteristic,
+        AbstractCache: AbstractCache,
+        AccessoryCache: AccessoryCache,
+        IdentifierCache: IdentifierCache
+    }
 }
 
-declare var hapNodeJS: HAPNodeJS.HAPNodeJS;
+declare var nodeJsHAPServer: NodeJSHAPServer.NodeJSHAPServer;
 
-declare module "hap-nodejs" {
-    export = hapNodeJS;
+declare module "nodejs-hap-server" {
+    export = nodeJsHAPServer;
 }

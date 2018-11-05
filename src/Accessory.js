@@ -11,6 +11,8 @@ const AccessoryCache = require('./cache/AccessoryCache');
 const IdentifierCache = require('./cache/IdentifierCache');
 const nodeCleanup = require('node-cleanup');
 
+const INFO_PROPERTIES_SET_ON_PUBLISH = ['port', 'username', 'pincode'];
+
 /**
  * Accessory is a virtual HomeKit device. It can publish an associated HAP server for iOS devices to communicate
  * with - or it can run behind another "Bridge" Accessory server.
@@ -163,7 +165,8 @@ class Accessory extends EventEmitter {
 	 * Appends the given service to this accessory and sets up event listeners
 	 * to handle config and characteristics change.
 	 * 
-	 * @param {Function|Service} service 
+	 * @param {Function|Service} service
+	 * @returns {Service}
 	 */
 	addService(service, ...args) {
 
@@ -390,16 +393,21 @@ class Accessory extends EventEmitter {
 	 * Publishes this Accessory on the local network for iOS clients to communicate with.
 	 *
 	 * @param {Object} info - Required info for publishing.
+	 * @param {string} info.port - 
 	 * @param {string} info.username - The "username" (formatted as a MAC address - like "CC:22:3D:E3:CE:F6") of
 	 *                                this Accessory. Must be globally unique from all Accessories on your local network.
 	 * @param {string} info.pincode - The 8-digit pincode for clients to use when pairing this Accessory. Must be formatted
 	 *                               as a string like "031-45-154".
 	 */
 	publish(info = {}, allowInsecureRequest = false) {
-		if (this.info.category === Accessory.Categories.CAMERA) {
-			delete info.category;
-		}
-		this.info = Object.assign({}, this.info, info);
+		const filteredInfo = Object.keys(info)
+			.filter(key => INFO_PROPERTIES_SET_ON_PUBLISH.includes(key))
+			.reduce((filtered, key) => {
+		  		filtered[key] = info[key];
+		  		return filtered;
+			}, {});
+
+		this.info = Object.assign({}, this.info, filteredInfo);
 
 		// create our IdentifierCache so we can provide clients with stable aid/iid's
 		if (!(this._identifierCache = IdentifierCache.load(this.uuid))) {
